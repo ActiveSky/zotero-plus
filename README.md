@@ -40,6 +40,22 @@ Everything goes through `zotero-cli`; no Zotero plugin is required.
 
 ## Install
 
+### With the skills CLI
+
+```bash
+npx skills add ActiveSky/zotero-plus
+```
+
+Install globally for one agent instead of the current project:
+
+```bash
+npx skills add ActiveSky/zotero-plus -g -a claude-code
+```
+
+Upgrade later with `npx skills update zotero-plus`.
+
+### Manually
+
 Clone or copy this directory into your agent's skills folder:
 
 ```text

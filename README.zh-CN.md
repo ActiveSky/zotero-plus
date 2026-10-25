@@ -38,6 +38,22 @@ CCF/CORE 等级、检查 arXiv 新版本、查找正式发表版与开放获取 
 
 ## 安装
 
+### 使用 skills CLI
+
+```bash
+npx skills add ActiveSky/zotero-plus
+```
+
+全局安装到指定 agent（而不是当前项目）：
+
+```bash
+npx skills add ActiveSky/zotero-plus -g -a claude-code
+```
+
+以后升级用 `npx skills update zotero-plus`。
+
+### 手动安装
+
 把本目录复制或链接到 agent 的 skills 目录：
 
 ```text
