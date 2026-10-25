@@ -1,0 +1,81 @@
+name: Bug report
+description: Report a command that failed or produced the wrong result
+title: "[Bug]: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Please redact cookies, API keys and any item
+        data you consider private before posting logs.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: The command, the result, and what you expected instead.
+    validations:
+      required: true
+
+  - type: input
+    id: command
+    attributes:
+      label: Command
+      description: The exact command you ran.
+      placeholder: python scripts/zotero_plus.py venue --keys XXXXXXXX
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Output / traceback
+      render: shell
+    validations:
+      required: false
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows
+        - macOS
+        - Linux
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: zotero
+    attributes:
+      label: Zotero version
+      placeholder: "10.0.6"
+    validations:
+      required: true
+
+  - type: input
+    id: zotero-cli
+    attributes:
+      label: zotero-cli version or install method
+      placeholder: "uv tool install zotero-mcp-server (0.15.1)"
+    validations:
+      required: true
+
+  - type: input
+    id: python
+    attributes:
+      label: Python version
+      placeholder: "3.12.4"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I removed cookies, API keys and private item data from the report.
+          required: true
+        - label: I checked the existing issues for the same problem.
+          required: true

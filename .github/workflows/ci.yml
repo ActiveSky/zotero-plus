@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  syntax:
+    name: Syntax (${{ matrix.os }}, Python ${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Compile every script
+        run: python -m compileall -q scripts
+
+      - name: Check the router starts
+        run: python scripts/zotero_plus.py --help
+
+  hygiene:
+    name: Repository hygiene
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: No caches or databases committed
+        run: |
+          if find . -name '__pycache__' -o -name '*.pyc' -o -name '*.sqlite' | grep -q .; then
+            echo "Committed cache or database file found"
+            exit 1
+          fi
+
+      - name: state/ only contains .gitkeep
+        run: |
+          count=$(find state -mindepth 1 ! -name '.gitkeep' | wc -l)
+          if [ "$count" -ne 0 ]; then
+            echo "state/ must stay empty apart from .gitkeep"
+            exit 1
+          fi

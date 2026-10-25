@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security report
+    url: https://github.com/ActiveSky/zotero-plus/security/advisories/new
+    about: Please report security issues privately, not as a public issue.
+  - name: Upstream projects
+    url: https://github.com/kongyan66/arxiv2zh
+    about: Behaviour that comes from an upstream plugin may be better reported there.

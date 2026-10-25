@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+state/*
+!state/.gitkeep
+cookies.txt
+.env
+.DS_Store
+Thumbs.db

@@ -1,0 +1,41 @@
+name: Feature request
+description: Suggest a workflow or an improvement
+title: "[Feature]: "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: textarea
+    id: workflow
+    attributes:
+      label: The workflow you want
+      description: Describe what you are trying to accomplish, step by step.
+    validations:
+      required: true
+
+  - type: textarea
+    id: current
+    attributes:
+      label: What you do today
+      description: The workaround or manual steps you use now, if any.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Translation
+        - Venue / CCF / CORE
+        - Workflow (version / find / pdf)
+        - Naming and titles
+        - Installation / documentation
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+    validations:
+      required: false
