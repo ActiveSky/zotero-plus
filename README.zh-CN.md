@@ -79,7 +79,12 @@ python scripts/zotero_plus.py status 2503.24000
 python scripts/zotero_plus.py translate --arxiv-id 2503.24000 --no-attach --out-dir ./pdfs
 python scripts/zotero_plus.py translate --key DMI9KNFZ --local
 python scripts/zotero_plus.py config
+python scripts/zotero_plus.py account
 ```
+
+`account` 检查 cookie 是否还有效，并打印页面余额。网页 cookie 没有续期机制：
+hjfy.top 不会在 API 请求里重发 cookie，过期后接口直接返回 `LOGIN_REQUIRED`，
+只能重新登录再导入。
 
 一个配置文件 `~/.config/arxiv2zh/config.json` 驱动两种引擎：
 

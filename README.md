@@ -82,7 +82,13 @@ python scripts/zotero_plus.py status 2503.24000
 python scripts/zotero_plus.py translate --arxiv-id 2503.24000 --no-attach --out-dir ./pdfs
 python scripts/zotero_plus.py translate --key DMI9KNFZ --local
 python scripts/zotero_plus.py config
+python scripts/zotero_plus.py account
 ```
+
+`account` checks that the cookies still work and prints the page balance. The
+website cookie has no refresh flow: hjfy.top reissues nothing on API calls, so
+when it expires the API answers `LOGIN_REQUIRED` and only a fresh sign-in fixes
+it.
 
 One config file, `~/.config/arxiv2zh/config.json`, drives both engines:
 

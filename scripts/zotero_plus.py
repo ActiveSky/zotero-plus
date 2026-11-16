@@ -30,6 +30,7 @@ ROUTES: dict[str, tuple[str, str | None]] = {
     "login": ("translate/arxiv2zh.py", "login"),
     "cookies": ("translate/arxiv2zh.py", "export-cookies"),
     "config": ("translate/arxiv2zh.py", "config"),
+    "account": ("translate/arxiv2zh.py", "account"),
     # venue / CCF / CORE (arxiv-marker)
     "venue": ("venue/arxiv_marker.py", "resolve"),
     "venue-apply": ("venue/arxiv_marker.py", "apply"),
@@ -46,7 +47,7 @@ ROUTES: dict[str, tuple[str, str | None]] = {
 }
 
 GROUPS = {
-    "翻译 (arXiv -> 中文 PDF)": ["translate", "status", "download", "open", "login", "cookies", "config"],
+    "翻译 (arXiv -> 中文 PDF)": ["translate", "status", "download", "open", "login", "cookies", "config", "account"],
     "会议/期刊 (venue, CCF, CORE)": ["venue", "venue-apply", "venue-undo"],
     "工作流 (版本 / 正式发表版 / 开放 PDF)": ["arxiv-version", "find", "pdf"],
     "附件命名与标题": ["rename-title", "rename-zh", "rename-en", "titles"],

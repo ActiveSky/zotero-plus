@@ -904,6 +904,36 @@ def cmd_config(args) -> int:
     return 0
 
 
+def cmd_account(args) -> int:
+    """Whether the configured cookies still work, and how many pages are left.
+
+    The website cookie has no refresh flow: when it dies the API answers
+    LOGIN_REQUIRED and the only fix is signing in again and re-exporting it.
+    """
+    svc = service_from(args)
+    if not svc.cookie:
+        out("Not configured: web.cookies is empty in " + str(config_path(args)))
+        return 1
+    raw = svc.get_json("/api/billing/balance")
+    if str(raw.get("error") or "") == "LOGIN_REQUIRED":
+        out("Login expired: hjfy.top rejected the cookies. Sign in again, then:")
+        out(f"  zotero-plus cookies    # import from Zotero's jar")
+        out(f"  or edit web.cookies in {config_path(args)}")
+        return 1
+    balances = raw.get("balances") or []
+    if not balances:
+        out(json.dumps(raw, ensure_ascii=False, indent=2))
+        return 0
+    out("Signed in.")
+    for row in balances:
+        resource = row.get("resource", "?")
+        available = row.get("available", 0)
+        detail = ", ".join(f"{k} {row[k]}" for k in ("gift", "purchased", "reserved")
+                           if isinstance(row.get(k), (int, float)) and row[k])
+        out(f"  {resource:<20} available {available}" + (f"  ({detail})" if detail else ""))
+    return 0
+
+
 def cmd_login(args) -> int:
     svc = service_from(args)
     webbrowser.open(svc.base)
@@ -964,6 +994,9 @@ def main() -> int:
 
     cf = sub.add_parser("config", help="Show the config file and where it lives")
     cf.set_defaults(func=cmd_config)
+
+    ac = sub.add_parser("account", help="Check whether the cookies still work and show the balance")
+    ac.set_defaults(func=cmd_account)
 
     ec = sub.add_parser("export-cookies", help="Import hjfy.top cookies from Zotero into the config")
     ec.set_defaults(func=cmd_export_cookies)

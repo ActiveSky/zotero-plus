@@ -25,6 +25,9 @@ All notable changes to this project are documented here. The format follows
   `local.engine` is empty, and its `PATH` is built from `bin`, `deps`, `lib`
   and `System32\downlevel`.
 - `zotero-plus config` prints the config with cookies and the API key masked.
+- `zotero-plus account` checks that the cookies still work and prints the page
+  balance. The website cookie has no refresh flow: hjfy.top reissues nothing on
+  API calls, so an expired session only surfaces as `LOGIN_REQUIRED`.
 - `translate --unlock` and `download --unlock` spend the quoted pages from the
   hjfy.top balance to fetch the whole translation. It is explicit, never implied
   by `--force`, and needs the cookie.

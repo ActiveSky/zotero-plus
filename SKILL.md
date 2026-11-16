@@ -11,6 +11,7 @@ One command surface for three jobs that all drive `zotero-cli`:
 |---|---|---|
 | 翻译 | `translate` | arXiv → Chinese PDF, attached to the item (`--local` uses the local engine) |
 | | `config` | show `~/.config/arxiv2zh/config.json` with secrets masked |
+| | `account` | check whether the cookies still work; show the page balance |
 | | `status` | remote translation state |
 | | `download` | download the Chinese PDF only |
 | | `open` | open the paper on hjfy.top |
@@ -106,7 +107,12 @@ fonts and OCR models must be installed (see below).
 ```powershell
 zotero-plus cookies      # import from Zotero's jar into config.json
 zotero-plus config       # show the config, secrets masked
+zotero-plus account      # are the cookies still valid, and how many pages are left
 ```
+
+The website cookie has no refresh flow — hjfy.top reissues nothing on API
+calls. When it dies the API answers `LOGIN_REQUIRED`; `account` reports that
+before a translation does.
 
 `local.engine` may stay empty: the script then uses the newest
 `%LOCALAPPDATA%\hjfy-engine\runtime-*/bin/hjfy-pdf.exe`. That runtime needs
