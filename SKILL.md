@@ -20,7 +20,7 @@ One command surface for three jobs that all drive `zotero-cli`:
 | 工作流 | `arxiv-version` | is the local arXiv PDF behind the live version? |
 | | `find` | discover the published version across five sources (read-only) |
 | | `pdf` | find an open-access PDF and optionally attach it |
-| 附件整理 | `rename-title` | **recommended**: every PDF filename = item title (`<title>.pdf`, `<title>_zh_CN.pdf`) |
+| 附件整理 | `rename-title` | **recommended**: every PDF filename = item title (`<title>.pdf`, `<title>_zh_CN.pdf`); `--keys` / `--attachment-keys` scope it |
 | | `rename-zh` | Chinese PDF filename = English PDF name + `_zh_CN` |
 | | `rename-en` | English PDF filename = item title (one day's imports) |
 | | `titles` | align attachment titles (Chinese: filename; English: paper title) |
@@ -51,6 +51,7 @@ zotero-plus pdf --keys IGEDXRM8 --attach
 
 # Filenames and titles (title-only naming)
 zotero-plus rename-title                # preview
+zotero-plus rename-title --keys DMI9KNFZ  # preview a single item
 zotero-plus rename-title --apply        # requires Zotero closed
 zotero-plus titles
 zotero-plus titles --english --added 2026-10-24 --apply
@@ -167,6 +168,23 @@ zotero-plus rename-title                # preview every item that has a Chinese 
 # quit Zotero
 zotero-plus rename-title --apply        # files + DB paths + titles, one pass
 ```
+
+Scope a run to one item or one attachment — the rest of the library is left
+alone:
+
+```powershell
+zotero-plus rename-title --keys DC8UEKWS                      # preview one item
+zotero-plus rename-title --keys A,B                           # several items
+zotero-plus rename-title --attachment-keys G7NBDFSE           # one attachment
+# quit Zotero
+zotero-plus rename-title --keys DC8UEKWS --apply
+```
+
+A scoped run also covers items with no Chinese PDF; the library-wide run does
+not. Keys are case-insensitive, and a key that matches nothing exits non-zero
+instead of passing quietly. With `--attachment-keys` the ` (2)`, ` (3)`
+numbering counts only the selected attachments, so a name that is already taken
+is reported as `target exists` rather than overwriting the other file.
 
 It also sets displayed titles: English attachments get the paper title, Chinese
 ones the filename without `.pdf`. A database backup goes to `state/`.

@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `rename-title` takes `--keys` and `--attachment-keys` (comma-separated,
+  case-insensitive) to scope a run to specific items or attachments, so one
+  file can be renamed without touching the rest of the library.
+- A scoped run also covers items that have no Chinese translation. A key that
+  matches nothing is reported on stderr and exits non-zero.
+
 ## [0.1.0] - 2026-10-25
 
 ### Added

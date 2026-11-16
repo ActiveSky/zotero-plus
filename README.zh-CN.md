@@ -117,12 +117,17 @@ python scripts/zotero_plus.py pdf --keys IGEDXRM8 --attach
 ```bash
 python scripts/zotero_plus.py rename-title
 python scripts/zotero_plus.py rename-title --apply    # 需关闭 Zotero
+python scripts/zotero_plus.py rename-title --keys DC8UEKWS
+python scripts/zotero_plus.py rename-title --attachment-keys G7NBDFSE
 python scripts/zotero_plus.py titles
 python scripts/zotero_plus.py titles --english --added 2026-10-24 --apply
 ```
 
 命名规则：`英文 PDF = <标题>.pdf`，`中文 PDF = <标题>_zh_CN.pdf`，同一篇的
 多份附件加 ` (2)`、` (3)`。Windows 不允许的字符会被替换（`:` 变成 ` -`）。
+
+`--keys` 和 `--attachment-keys`（逗号分隔、大小写不敏感）把一次运行限定到
+指定条目或附件，也覆盖没有中文译文的条目。key 一个都没匹配上时以非零码退出。
 
 `rename-*` 会修改 `zotero.sqlite` 和 storage 目录，写入前自动备份数据库到
 `state/`，并且要求关闭 Zotero。

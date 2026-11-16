@@ -120,6 +120,8 @@ python scripts/zotero_plus.py pdf --keys IGEDXRM8 --attach
 ```bash
 python scripts/zotero_plus.py rename-title
 python scripts/zotero_plus.py rename-title --apply    # Zotero must be closed
+python scripts/zotero_plus.py rename-title --keys DC8UEKWS
+python scripts/zotero_plus.py rename-title --attachment-keys G7NBDFSE
 python scripts/zotero_plus.py titles
 python scripts/zotero_plus.py titles --english --added 2026-10-24 --apply
 ```
@@ -127,6 +129,10 @@ python scripts/zotero_plus.py titles --english --added 2026-10-24 --apply
 House rule: `English PDF = <title>.pdf`, `Chinese PDF = <title>_zh_CN.pdf`,
 additional copies get ` (2)`, ` (3)`. Windows-illegal characters are replaced
 (`:` becomes ` -`).
+
+`--keys` and `--attachment-keys` (comma-separated, case-insensitive) scope a
+run to specific items or attachments, and also cover items with no Chinese
+translation. A key that matches nothing exits non-zero.
 
 `rename-*` modifies `zotero.sqlite` and the storage folder, backs up the
 database to `state/`, and requires Zotero to be closed.

@@ -10,6 +10,17 @@ Displayed titles follow: English attachments get the paper title, Chinese ones
 get the filename without .pdf. Author/year prefixes are dropped because the
 item metadata already carries them.
 
+A run can be scoped to one item or one attachment, so a single file can be
+fixed without touching the rest of the library:
+
+    --keys ITEMKEY[,ITEMKEY...]        only these parent items
+    --attachment-keys ATTKEY[,...]     only these attachments
+
+A scoped run covers items that have no Chinese attachment too. With
+--attachment-keys, the ` (2)`, ` (3)` numbering counts the selected
+attachments only, so a file whose preferred name is taken is reported as
+"target exists" instead of being overwritten.
+
 Zotero must be closed for --apply. Run without --apply for a preview.
 """
 
@@ -65,7 +76,35 @@ def open_db(db: Path) -> sqlite3.Connection:
         return sqlite3.connect(tmp / db.name)
 
 
-def build_plan(con: sqlite3.Connection) -> list[dict]:
+def split_keys(value: str | None) -> set[str] | None:
+    """Parse a comma-separated key list; Zotero keys are upper case."""
+    if not value:
+        return None
+    keys = {k.strip().upper() for k in value.split(",") if k.strip()}
+    return keys or None
+
+
+def build_plan(con: sqlite3.Connection, keys: set[str] | None = None,
+               attachment_keys: set[str] | None = None) -> list[dict]:
+    scoped = bool(keys or attachment_keys)
+    where = ["ia.contentType = 'application/pdf'"]
+    params: list[str] = []
+    if not scoped:
+        # Library-wide runs stay on items that carry a Chinese translation;
+        # a scoped run may legitimately target an English-only item.
+        where.append(
+            "pi.itemID IN ("
+            "  SELECT ia2.parentItemID FROM itemAttachments ia2 "
+            "  WHERE lower(ia2.path) LIKE '%_zh_cn.pdf'"
+            ")"
+        )
+    if keys:
+        where.append(f"pi.key IN ({','.join('?' * len(keys))})")
+        params.extend(sorted(keys))
+    if attachment_keys:
+        where.append(f"ai.key IN ({','.join('?' * len(attachment_keys))})")
+        params.extend(sorted(attachment_keys))
+
     rows = con.execute(
         "SELECT pi.key, pi.itemID, pv.value, ai.key, ai.itemID, ia.path "
         "FROM items pi "
@@ -74,12 +113,9 @@ def build_plan(con: sqlite3.Connection) -> list[dict]:
         "JOIN itemData pid ON pid.itemID = pi.itemID "
         "JOIN fields pf ON pf.fieldID = pid.fieldID AND pf.fieldName = 'title' "
         "JOIN itemDataValues pv ON pv.valueID = pid.valueID "
-        "WHERE ia.contentType = 'application/pdf' "
-        "  AND pi.itemID IN ("
-        "    SELECT ia2.parentItemID FROM itemAttachments ia2 "
-        "    WHERE lower(ia2.path) LIKE '%_zh_cn.pdf'"
-        "  ) "
-        "ORDER BY pi.key, ai.itemID"
+        f"WHERE {' AND '.join(where)} "
+        "ORDER BY pi.key, ai.itemID",
+        params,
     ).fetchall()
 
     by_parent: dict[str, list] = {}
@@ -128,8 +164,14 @@ def main() -> int:
     p.add_argument("--data-dir", default=str(DEFAULT_DATA))
     p.add_argument("--apply", action="store_true")
     p.add_argument("--backup-dir", default=None)
+    p.add_argument("--keys", help="Comma-separated Zotero item keys (default: every item)")
+    p.add_argument("--attachment-keys",
+                   help="Comma-separated attachment keys (default: every attachment)")
     p.add_argument("--json", action="store_true", help="Print the plan as JSON")
     args = p.parse_args()
+
+    keys = split_keys(args.keys)
+    attachment_keys = split_keys(args.attachment_keys)
 
     data = Path(args.data_dir)
     db = data / "zotero.sqlite"
@@ -143,13 +185,23 @@ def main() -> int:
 
     con = open_db(db)
     try:
-        plan = build_plan(con)
+        plan = build_plan(con, keys, attachment_keys)
     finally:
         con.close()
 
+    missing = []
+    if keys:
+        missing += sorted(keys - {r["pkey"] for r in plan})
+    if attachment_keys:
+        missing += sorted(attachment_keys - {r["key"] for r in plan})
+    for key in missing:
+        print(f"not found: {key} (no matching PDF in scope)", file=sys.stderr)
+    # A scope that matched nothing is a typo or the wrong key, not a quiet no-op.
+    empty_scope = bool(missing) and not plan
+
     if args.json:
         print(json.dumps(plan, ensure_ascii=False, indent=2))
-        return 0
+        return 1 if empty_scope else 0
 
     todo = [r for r in plan if r["status"] == "rename"]
     print(f"{len(plan)} PDF(s): {len(todo)} to rename, {len(plan) - len(todo)} unchanged\n")
@@ -161,9 +213,9 @@ def main() -> int:
 
     if not args.apply:
         print("\nPreview only. Quit Zotero, then re-run with --apply.")
-        return 0
+        return 1 if empty_scope else 0
     if not todo:
-        return 0
+        return 1 if empty_scope else 0
 
     backup_dir = Path(args.backup_dir) if args.backup_dir else Path(__file__).resolve().parent.parent.parent / "state"
     backup_dir.mkdir(parents=True, exist_ok=True)
