@@ -13,9 +13,17 @@ All notable changes to this project are documented here. The format follows
   file can be renamed without touching the rest of the library.
 - A scoped run also covers items that have no Chinese translation. A key that
   matches nothing is reported on stderr and exits non-zero.
+- `translate --unlock` and `download --unlock` spend the quoted pages from the
+  hjfy.top balance to fetch the whole translation. It is explicit, never implied
+  by `--force`, and needs the cookie.
 
 ### Fixed
 
+- `translate` and `download` no longer attach a 5-page preview as if it were the
+  translation. hjfy.top reports `isPreview` / `accessSource: "preview"` /
+  `canReadFullPdf: false` for a paper that is not unlocked, and the preview is a
+  valid PDF, so nothing in the download path noticed. Both commands now stop
+  with the translated page count and the unlock price.
 - Runtime state no longer lands inside the skill directory. Database backups,
   `venue` plans and `venue-undo` snapshots now default to
   `~/.cache/zotero-plus/`, overridable with `ZOTERO_PLUS_STATE_DIR`. An

@@ -278,6 +278,23 @@ class Service:
         except Exception as e:
             die(f"{path}: {e}")
 
+    def post_json(self, path: str, payload: dict) -> dict:
+        body = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(
+            self.base + path,
+            data=body,
+            headers=self._headers({"Content-Type": "application/json"}),
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                return json.loads(resp.read().decode("utf-8", "replace"))
+        except urllib.error.HTTPError as e:
+            body_text = e.read().decode("utf-8", "replace")[:300]
+            die(f"{path}: HTTP {e.code} {body_text}")
+        except Exception as e:
+            die(f"{path}: {e}")
+
     def get_bytes(self, url: str) -> bytes:
         req = urllib.request.Request(url, headers=self._headers())
         with urllib.request.urlopen(req, timeout=120) as resp:
@@ -394,6 +411,57 @@ def fetch_files(svc: Service, kind: str, remote_id: str) -> dict:
     return data
 
 
+def access_problem(files: dict) -> str | None:
+    """Why the result is not the whole translation, or None when it is.
+
+    hjfy.top hands out a fixed-size preview to callers without an unlocked
+    result, and the preview is a valid PDF: downloading it silently leaves a
+    five-page file attached to the item. The plugin's own client refuses such
+    a result (`canDownloadArxiv`), and so must this one.
+    """
+    if files.get("isPreview") or files.get("accessSource") == "preview":
+        limit = files.get("previewPageLimit")
+        pages = files.get("translatedPageCount")
+        what = f"a {limit}-page preview" if limit else "a preview"
+        if pages:
+            what += f" of {pages} translated pages"
+        return f"hjfy.top returns {what}"
+    if files.get("unlocked") is False or files.get("canReadFullPdf") is False:
+        return "the full PDF is locked"
+    if files.get("accessSource") == "membership" and files.get("accessExpiresAt") is None:
+        return "the reading pass for this PDF has expired"
+    return None
+
+
+def unlock_hint(files: dict, remote_id: str) -> str:
+    quote = files.get("unlockQuote") or {}
+    pages = quote.get("pages")
+    cost = f" ({pages} page(s) from your balance)" if pages else ""
+    return (f"Unlock it to download the whole file{cost}: re-run with --unlock, "
+            f"or open {DEFAULT_SERVICE}/arxiv/{remote_id}")
+
+
+def unlock_result(svc: Service, kind: str, remote_id: str, files: dict) -> dict:
+    """Spend the quoted pages on the full result, then re-read it."""
+    if kind != "arxiv":
+        die("--unlock applies to arXiv results only; uploaded PDFs are charged when submitted.")
+    quote = files.get("unlockQuote") or {}
+    quote_id = quote.get("id")
+    if not quote_id:
+        die(f"no unlock quote in the result: {files}")
+    pages = quote.get("pages")
+    out(f"Unlocking {remote_id}" + (f" for {pages} page(s)" if pages else "") + "…")
+    code, _data, msg = envelope(
+        svc.post_json(f"/api/arxivUnlock/{urllib.parse.quote(remote_id)}", {"quoteId": quote_id})
+    )
+    if code == 101:
+        die("hjfy.top requires a login to unlock. Sign in there and put the cookie in "
+            f"{DEFAULT_COOKIE_FILE} (or pass --cookie).")
+    if code != 0:
+        die(f"unlock failed: {msg or code}")
+    return fetch_files(svc, kind, remote_id)
+
+
 def upload_item_pdf(svc: Service, item_key: str) -> tuple[str, str, str]:
     """Upload the item's first PDF. Returns (kind, remote_id, file_name)."""
     atts = child_attachments(item_key)
@@ -502,6 +570,13 @@ def cmd_translate(args) -> int:
         wait_file(svc, remote_id, args.poll_interval, args.timeout)
 
     files = fetch_files(svc, kind, remote_id)
+    problem = access_problem(files)
+    if problem:
+        if args.unlock:
+            files = unlock_result(svc, kind, remote_id, files)
+            problem = access_problem(files)
+        if problem:
+            die(f"{problem}. {unlock_hint(files, remote_id)}")
     url = files.get("zhCN")
     if not url:
         die(f"result has no zhCN PDF URL: {files}")
@@ -537,7 +612,15 @@ def cmd_translate(args) -> int:
 
 def cmd_download(args) -> int:
     svc = Service(args.service_url, resolve_cookie(args))
-    files = fetch_files(svc, "arxiv", parse_arxiv_id(args.arxiv_id) or args.arxiv_id)
+    arxiv_id = parse_arxiv_id(args.arxiv_id) or args.arxiv_id
+    files = fetch_files(svc, "arxiv", arxiv_id)
+    problem = access_problem(files)
+    if problem:
+        if args.unlock:
+            files = unlock_result(svc, "arxiv", arxiv_id, files)
+            problem = access_problem(files)
+        if problem:
+            die(f"{problem}. {unlock_hint(files, arxiv_id)}")
     url = files.get("zhCN")
     if not url:
         die(f"result has no zhCN PDF URL: {files}")
@@ -640,11 +723,15 @@ def main() -> int:
                    help="Open the PDF in Zotero after attaching")
     t.add_argument("--poll-interval", type=int, default=10)
     t.add_argument("--timeout", type=int, default=1800)
+    t.add_argument("--unlock", action="store_true",
+                   help="Spend the quoted pages to download the whole translation instead of a preview")
     t.set_defaults(func=cmd_translate)
 
     d = sub.add_parser("download", help="Only download the finished Chinese PDF")
     d.add_argument("arxiv_id")
     d.add_argument("--out-dir", default=".")
+    d.add_argument("--unlock", action="store_true",
+                   help="Spend the quoted pages to download the whole translation instead of a preview")
     d.set_defaults(func=cmd_download)
 
     o = sub.add_parser("open", help="Open the paper on hjfy.top")

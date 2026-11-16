@@ -83,6 +83,11 @@ python scripts/zotero_plus.py translate --arxiv-id 2503.24000 --no-attach --out-
 hjfy.top 登录；cookie 依次从 `~/.config/arxiv2zh/cookies.txt`、`--cookie`、
 Zotero 的 cookie jar 读取。
 
+未解锁时 hjfy.top 只给**前 5 页预览**，而预览本身是个合法 PDF，不校验就会
+被当成译文挂到条目上。`translate` 和 `download` 现在会直接停下，报出译文总
+页数和解锁价格，不再静默保存。加 `--unlock` 才会从账户余额里扣掉报价页数，
+然后下载完整文件。
+
 ### 识别会议/期刊与 CCF/CORE
 
 ```bash

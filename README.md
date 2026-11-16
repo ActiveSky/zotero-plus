@@ -86,6 +86,12 @@ Papers with LaTeX source work anonymously. Papers without source require
 uploading the local PDF, which needs a hjfy.top login; the cookie is read from
 `~/.config/arxiv2zh/cookies.txt`, then `--cookie`, then Zotero's cookie jar.
 
+A locked result is a **preview**: hjfy.top serves the first five pages until the
+paper is unlocked, and the preview is a valid PDF that would otherwise be
+attached as if it were the translation. `translate` and `download` stop with the
+translated page count and the price rather than saving it. `--unlock` spends the
+quoted pages from the account balance and then downloads the whole file.
+
 ### Resolve venue, CCF and CORE
 
 ```bash

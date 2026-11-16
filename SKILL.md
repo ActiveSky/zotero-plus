@@ -81,6 +81,13 @@ Flow: `arxivInfo` → poll `arxivStatus`, or upload the item's PDF and poll
 - Papers with LaTeX source work anonymously. Uploading a PDF (no source) needs
   a hjfy.top login; the cookie is read from
   `~/.config/arxiv2zh/cookies.txt`, then `--cookie`, then Zotero's jar.
+- **A locked result is a preview.** hjfy.top serves the first pages only
+  (`isPreview`, `accessSource: "preview"`, `canReadFullPdf: false`) until the
+  paper is unlocked; the preview is still a valid PDF, so it must never be
+  attached as the translation. `translate` and `download` stop with the page
+  count and the price instead. `--unlock` spends the quoted pages from the
+  account balance and then downloads the whole file — it needs the cookie,
+  and it is never implied by `--force`.
 - Refresh the cookie after signing in again:
 
 ```powershell
