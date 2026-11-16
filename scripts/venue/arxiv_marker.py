@@ -44,7 +44,19 @@ DATA = json.loads((SKILL_ROOT / "data" / "rankings.json").read_text(encoding="ut
 RANKINGS = DATA["RANKINGS"]
 OVERRIDES = DATA.get("OVERRIDES", {})
 CCF = json.loads((SKILL_ROOT / "data" / "ccf.json").read_text(encoding="utf-8"))
-STATE_DIR = SKILL_ROOT / "state"
+
+
+def default_state_dir() -> Path:
+    """Per-user state, outside the skill directory.
+
+    `npx skills` replaces the whole skill on update, so plans and undo
+    snapshots must not live inside it. ZOTERO_PLUS_STATE_DIR overrides this.
+    """
+    override = os.environ.get("ZOTERO_PLUS_STATE_DIR")
+    return Path(override) if override else Path.home() / ".cache" / "zotero-plus"
+
+
+STATE_DIR = default_state_dir()
 
 UA = "arxiv-marker-skill/1.0 (+https://github.com/lelelelelelelelelelelelele/arxiv-marker)"
 

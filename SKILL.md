@@ -187,7 +187,9 @@ numbering counts only the selected attachments, so a name that is already taken
 is reported as `target exists` rather than overwriting the other file.
 
 It also sets displayed titles: English attachments get the paper title, Chinese
-ones the filename without `.pdf`. A database backup goes to `state/`.
+ones the filename without `.pdf`. A database backup goes to
+`~/.cache/zotero-plus/backups/`, which keeps the newest 3 and deletes the
+rest.
 
 The older, narrower helpers remain available:
 
@@ -201,7 +203,10 @@ zotero-plus titles --english --added 2026-10-24 --apply
 Windows forbids `\ / : * ? " < > |` in filenames, so `:` becomes ` -` and the
 rest are dropped. The displayed title keeps the original characters.
 
-`rename-*` back up `zotero.sqlite` into `state/` before writing.
+`rename-*` back up `zotero.sqlite` into `~/.cache/zotero-plus/backups/` before
+writing, keeping only the newest 3 backups. `ZOTERO_PLUS_STATE_DIR` overrides
+the location. Runtime state never goes inside the skill directory, because
+`npx skills` replaces that directory on update.
 
 ## Upstream sources
 
@@ -257,5 +262,5 @@ scripts/
   workflow/oa_pdf.py          open-access PDF lookup
 data/rankings.json            CORE venue table (36)
 data/ccf.json                 CCF catalogue (680)
-state/.gitkeep                runtime plans, undo snapshots, database backups
+state/.gitkeep                unused placeholder; runtime state lives in ~/.cache/zotero-plus
 ```

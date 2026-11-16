@@ -14,6 +14,16 @@ All notable changes to this project are documented here. The format follows
 - A scoped run also covers items that have no Chinese translation. A key that
   matches nothing is reported on stderr and exits non-zero.
 
+### Fixed
+
+- Runtime state no longer lands inside the skill directory. Database backups,
+  `venue` plans and `venue-undo` snapshots now default to
+  `~/.cache/zotero-plus/`, overridable with `ZOTERO_PLUS_STATE_DIR`. An
+  installed skill lives in a directory that `npx skills` replaces on update,
+  so state written there was lost on the next update.
+- Only the newest 3 database backups are kept; older ones are pruned after
+  each run.
+
 ## [0.1.0] - 2026-10-25
 
 ### Added

@@ -91,7 +91,7 @@ uploading the local PDF, which needs a hjfy.top login; the cookie is read from
 ```bash
 python scripts/zotero_plus.py venue --keys DMI9KNFZ
 python scripts/zotero_plus.py venue --query "KV cache" --limit 20
-python scripts/zotero_plus.py venue-apply --plan state/plan-*.json --yes
+python scripts/zotero_plus.py venue-apply --plan ~/.cache/zotero-plus/plan-*.json --yes
 python scripts/zotero_plus.py venue-undo --yes
 ```
 
@@ -135,7 +135,9 @@ run to specific items or attachments, and also cover items with no Chinese
 translation. A key that matches nothing exits non-zero.
 
 `rename-*` modifies `zotero.sqlite` and the storage folder, backs up the
-database to `state/`, and requires Zotero to be closed.
+database to `~/.cache/zotero-plus/backups/` (newest 3 kept), and requires
+Zotero to be closed. `ZOTERO_PLUS_STATE_DIR` overrides the location. Nothing
+is written inside the skill directory, which `npx skills` replaces on update.
 
 ## Data sources
 

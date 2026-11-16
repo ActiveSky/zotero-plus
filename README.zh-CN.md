@@ -88,7 +88,7 @@ Zotero 的 cookie jar 读取。
 ```bash
 python scripts/zotero_plus.py venue --keys DMI9KNFZ
 python scripts/zotero_plus.py venue --query "KV cache" --limit 20
-python scripts/zotero_plus.py venue-apply --plan state/plan-*.json --yes
+python scripts/zotero_plus.py venue-apply --plan ~/.cache/zotero-plus/plan-*.json --yes
 python scripts/zotero_plus.py venue-undo --yes
 ```
 
@@ -130,7 +130,9 @@ python scripts/zotero_plus.py titles --english --added 2026-10-24 --apply
 指定条目或附件，也覆盖没有中文译文的条目。key 一个都没匹配上时以非零码退出。
 
 `rename-*` 会修改 `zotero.sqlite` 和 storage 目录，写入前自动备份数据库到
-`state/`，并且要求关闭 Zotero。
+`~/.cache/zotero-plus/backups/`（只保留最新 3 份），并且要求关闭 Zotero。
+`ZOTERO_PLUS_STATE_DIR` 可以改这个位置。skill 目录内不写任何运行时数据，因为
+`npx skills` 更新时会整个替换掉该目录。
 
 ## 数据来源
 

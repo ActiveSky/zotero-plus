@@ -71,7 +71,7 @@ def usage() -> str:
         "  zotero-plus translate --key DMI9KNFZ",
         "  zotero-plus status 2503.24000",
         "  zotero-plus venue --keys DMI9KNFZ",
-        "  zotero-plus venue-apply --plan state/plan-*.json --yes",
+        "  zotero-plus venue-apply --plan ~/.cache/zotero-plus/plan-*.json --yes",
         "  zotero-plus rename-title --keys DMI9KNFZ",
         "  zotero-plus titles --english --added 2026-10-24",
         "",

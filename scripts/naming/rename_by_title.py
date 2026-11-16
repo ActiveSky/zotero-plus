@@ -41,6 +41,35 @@ from pathlib import Path
 DEFAULT_DATA = Path(os.environ.get("ZOTERO_DATA_DIR", Path.home() / "Zotero"))
 
 
+KEEP_BACKUPS = 3
+
+
+def default_state_dir() -> Path:
+    """Per-user state, outside the skill directory.
+
+    `npx skills` replaces the whole skill on update, so a database backup must
+    not live inside it. ZOTERO_PLUS_STATE_DIR overrides this.
+    """
+    override = os.environ.get("ZOTERO_PLUS_STATE_DIR")
+    return Path(override) if override else Path.home() / ".cache" / "zotero-plus"
+
+
+def prune_backups(directory: Path, keep: int = KEEP_BACKUPS) -> list[Path]:
+    """Delete all but the newest `keep` database backups in `directory`."""
+    try:
+        files = sorted(directory.glob("zotero-before-*.sqlite"), key=lambda p: p.stat().st_mtime)
+    except OSError:
+        return []
+    removed = []
+    for old in files[:-keep] if len(files) > keep else []:
+        try:
+            old.unlink()
+            removed.append(old)
+        except OSError:
+            pass
+    return removed
+
+
 def zotero_running() -> bool:
     try:
         if os.name == "nt":
@@ -217,12 +246,14 @@ def main() -> int:
     if not todo:
         return 1 if empty_scope else 0
 
-    backup_dir = Path(args.backup_dir) if args.backup_dir else Path(__file__).resolve().parent.parent.parent / "state"
+    backup_dir = Path(args.backup_dir) if args.backup_dir else default_state_dir() / "backups"
     backup_dir.mkdir(parents=True, exist_ok=True)
     stamp = time.strftime("%Y%m%d-%H%M%S")
     backup = backup_dir / f"zotero-before-title-rename-{stamp}.sqlite"
     shutil.copy2(db, backup)
     print(f"\nBackup: {backup}")
+    for old in prune_backups(backup_dir):
+        print(f"Pruned: {old}")
 
     ok = failed = 0
     con = sqlite3.connect(db)
