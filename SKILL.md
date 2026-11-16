@@ -9,7 +9,8 @@ One command surface for three jobs that all drive `zotero-cli`:
 
 | Group | Command | What it does |
 |---|---|---|
-| 翻译 | `translate` | arXiv → Chinese PDF, attached to the item |
+| 翻译 | `translate` | arXiv → Chinese PDF, attached to the item (`--local` uses the local engine) |
+| | `config` | show `~/.config/arxiv2zh/config.json` with secrets masked |
 | | `status` | remote translation state |
 | | `download` | download the Chinese PDF only |
 | | `open` | open the paper on hjfy.top |
@@ -73,14 +74,26 @@ folder, so Zotero must be closed for `--apply`. `titles`, `translate`,
 
 ## 翻译 (arXiv → 中文 PDF)
 
-Flow: `arxivInfo` → poll `arxivStatus`, or upload the item's PDF and poll
+Two engines, one config file at `~/.config/arxiv2zh/config.json`:
+
+| | `web` | `local` |
+|---|---|---|
+| Engine | hjfy.top cloud | `hjfy-pdf` on this machine |
+| Auth | `web.cookies` (session cookie) | `local.api_key` + `local.model` |
+| Cost | page balance; locked papers are previews | your own API tokens |
+| Command | `translate --key KEY` | `translate --key KEY --local` |
+
+Web flow: `arxivInfo` → poll `arxivStatus`, or upload the item's PDF and poll
 `fileStatus` → `arxivFiles`/`fileFiles` → download → attach.
+
+Local flow: read the item's English PDF → run the engine with
+`local.base_url`/`local.model` → attach the result. The engine's runtime,
+fonts and OCR models must be installed (see below).
 
 - Naming: **`<English PDF basename>_zh_CN.pdf`**, falling back to the arXiv id.
 - An existing translation attachment is reused unless `--force`.
-- Papers with LaTeX source work anonymously. Uploading a PDF (no source) needs
-  a hjfy.top login; the cookie is read from
-  `~/.config/arxiv2zh/cookies.txt`, then `--cookie`, then Zotero's jar.
+- Cookie order: `--cookie`, then `web.cookies`, then a legacy `--cookie-file`,
+  then Zotero's jar.
 - **A locked result is a preview.** hjfy.top serves the first pages only
   (`isPreview`, `accessSource: "preview"`, `canReadFullPdf: false`) until the
   paper is unlocked; the preview is still a valid PDF, so it must never be
@@ -88,11 +101,18 @@ Flow: `arxivInfo` → poll `arxivStatus`, or upload the item's PDF and poll
   count and the price instead. `--unlock` spends the quoted pages from the
   account balance and then downloads the whole file — it needs the cookie,
   and it is never implied by `--force`.
-- Refresh the cookie after signing in again:
+- Refresh the cookies after signing in again, then check what the script sees:
 
 ```powershell
-zotero-plus cookies
+zotero-plus cookies      # import from Zotero's jar into config.json
+zotero-plus config       # show the config, secrets masked
 ```
+
+`local.engine` may stay empty: the script then uses the newest
+`%LOCALAPPDATA%\hjfy-engine\runtime-*/bin/hjfy-pdf.exe`. That runtime needs
+`libstdc++-6.dll`, `libgcc_s_seh-1.dll` and `libwinpthread-1.dll` (MinGW) — put
+them in `<runtime>\deps\`; the engine's own `PATH` is built from `bin`, `deps`,
+`lib` and `System32\downlevel`.
 
 Full options: `zotero-plus translate --help`.
 

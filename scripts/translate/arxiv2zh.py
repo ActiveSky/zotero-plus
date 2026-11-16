@@ -43,7 +43,30 @@ from pathlib import Path
 DEFAULT_SERVICE = "https://hjfy.top"
 UA = "arxiv2zh-skill/1.0"
 ZH_TITLES = {"中文翻译 - arxiv2zh", "Chinese Translation - arxiv2zh"}
-DEFAULT_COOKIE_FILE = Path.home() / ".config" / "arxiv2zh" / "cookies.txt"
+CONFIG_DIR = Path.home() / ".config" / "arxiv2zh"
+DEFAULT_CONFIG_FILE = CONFIG_DIR / "config.json"
+# Kept for `--cookie-file`; the config file replaced it and `cookies` migrates it.
+LEGACY_COOKIE_FILE = CONFIG_DIR / "cookies.txt"
+
+CONFIG_DEFAULTS: dict = {
+    "version": 1,
+    "web": {
+        "service_url": DEFAULT_SERVICE,
+        "cookies": {},
+    },
+    "local": {
+        # Empty engine/model/api_key mean "not configured yet"; the command says so.
+        "engine": "",
+        "base_url": "https://labhub.activesky.asia/v1",
+        "api_key": "",
+        "model": "",
+        "source_language": "en",
+        "target_language": "zh-Hans",
+        "font_profile": "notocjk",
+        "ocr_mode": "auto",
+        "concurrency": 4,
+    },
+}
 
 _ARXIV_NEW = re.compile(r"(\d{4}\.\d{4,5})(v\d+)?", re.I)
 _ARXIV_TAGGED = re.compile(r"arxiv[:.\s/]*?(\d{4}\.\d{4,5})", re.I)
@@ -187,6 +210,56 @@ def profile_dir() -> Path | None:
     return None
 
 
+def _merge(base: dict, override: dict) -> dict:
+    out = dict(base)
+    for key, value in (override or {}).items():
+        if isinstance(value, dict) and isinstance(out.get(key), dict):
+            out[key] = _merge(out[key], value)
+        else:
+            out[key] = value
+    return out
+
+
+def load_config(path: Path | None = None) -> dict:
+    """Read config.json, filling in every default the file leaves out.
+
+    A broken or missing file is not fatal: the defaults are usable, and the
+    commands that need a setting report which one is missing.
+    """
+    target = Path(path) if path else DEFAULT_CONFIG_FILE
+    if not target.exists():
+        return _merge(CONFIG_DEFAULTS, {})
+    try:
+        raw = json.loads(target.read_text(encoding="utf-8"))
+    except Exception as e:
+        out(f"warning: {target} is not valid JSON ({e}); using defaults")
+        return _merge(CONFIG_DEFAULTS, {})
+    if not isinstance(raw, dict):
+        out(f"warning: {target} must contain a JSON object; using defaults")
+        return _merge(CONFIG_DEFAULTS, {})
+    return _merge(CONFIG_DEFAULTS, raw)
+
+
+def config_path(args) -> Path:
+    explicit = getattr(args, "config", None)
+    return Path(explicit) if explicit else DEFAULT_CONFIG_FILE
+
+
+def write_config(config: dict, path: Path | None = None) -> Path:
+    target = Path(path) if path else DEFAULT_CONFIG_FILE
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return target
+
+
+def cookie_from_config(config: dict) -> str | None:
+    cookies = (config.get("web") or {}).get("cookies") or {}
+    if not isinstance(cookies, dict):
+        return None
+    parts = [f"{name}={value}" for name, value in cookies.items() if name and value]
+    return "; ".join(parts) or None
+
+
 def cookie_from_file(path: Path | None) -> str | None:
     """Read a Netscape cookie file and return the hjfy.top Cookie header."""
     if not path or not path.exists():
@@ -211,9 +284,12 @@ def cookie_from_file(path: Path | None) -> str | None:
 
 
 def resolve_cookie(args) -> str | None:
-    """--cookie beats the cookie file, which beats a live read of Zotero's jar."""
+    """--cookie beats config.json, which beats a cookie file, which beats Zotero's jar."""
     if getattr(args, "cookie", None):
         return args.cookie
+    value = cookie_from_config(getattr(args, "config_data", None) or load_config(config_path(args)))
+    if value:
+        return value
     cookie_file = getattr(args, "cookie_file", None)
     if cookie_file:
         value = cookie_from_file(Path(cookie_file))
@@ -222,6 +298,14 @@ def resolve_cookie(args) -> str | None:
     if getattr(args, "cookie_from_zotero", False):
         return cookie_from_zotero()
     return None
+
+
+def service_from(args) -> "Service":
+    config = getattr(args, "config_data", None) or load_config(config_path(args))
+    url = (getattr(args, "service_url", None)
+           or (config.get("web") or {}).get("service_url")
+           or DEFAULT_SERVICE)
+    return Service(url, resolve_cookie(args))
 
 
 def cookie_from_zotero() -> str | None:
@@ -516,6 +600,123 @@ def english_pdf_basename(item_key: str) -> str | None:
     return None
 
 
+# ------------------------------------------------------------------ local engine
+
+LOCAL_KEY_ENV = "ARXIV2ZH_LOCAL_KEY"
+
+
+def source_pdf(item_key: str) -> Path | None:
+    """The item's English PDF, the input the local engine translates."""
+    paths = attachment_paths(item_key)
+    for att in child_attachments(item_key):
+        path = paths.get(att["key"])
+        if not path:
+            continue
+        p = Path(path)
+        if p.suffix.lower() == ".pdf" and not p.name.lower().endswith("_zh_cn.pdf"):
+            return p
+    return None
+
+
+def engine_path(config: dict) -> Path:
+    """local.engine if set, else the newest runtime the Zotero plugin installed."""
+    configured = (config.get("local") or {}).get("engine")
+    if configured:
+        p = Path(os.path.expandvars(os.path.expanduser(str(configured))))
+        if p.is_file():
+            return p
+        die(f"local.engine points at a missing file: {p}")
+    roots = []
+    if os.name == "nt" and os.environ.get("LOCALAPPDATA"):
+        roots.append(Path(os.environ["LOCALAPPDATA"]) / "hjfy-engine")
+    roots.append(Path.home() / "hjfy-engine")
+    for root in roots:
+        for candidate in sorted(root.glob("runtime-*/bin/hjfy-pdf*"), reverse=True):
+            if candidate.is_file():
+                return candidate
+    die("No local engine found. Set local.engine in the config to the hjfy-pdf "
+        "executable (the Zotero plugin's runtime), or download it there first.")
+
+
+def engine_env(engine: Path) -> dict:
+    """PATH the engine needs for its shared libraries.
+
+    The published runtime ships onnxruntime and pdfium in lib/ but not the MinGW
+    runtime, and on Windows the UCRT forwarders live under System32\\downlevel.
+    """
+    root = engine.parent.parent
+    env = dict(os.environ)
+    prepend = [str(engine.parent), str(root / "deps"), str(root / "lib")]
+    if os.name == "nt":
+        prepend.append(str(Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32" / "downlevel"))
+    env["PATH"] = os.pathsep.join(prepend + [env.get("PATH", "")])
+    return env
+
+
+def cmd_translate_local(args) -> int:
+    config = getattr(args, "config_data", None) or load_config(config_path(args))
+    local = config.get("local") or {}
+    missing = [f"local.{k}" for k in ("api_key", "model") if not local.get(k)]
+    if missing:
+        verb = "are" if len(missing) > 1 else "is"
+        die(f"{' and '.join(missing)} {verb} empty in {config_path(args)}. "
+            "Fill in the API credentials, then run again.")
+    engine = engine_path(config)
+
+    item_key = args.key
+    if item_key:
+        src = source_pdf(item_key)
+        if not src:
+            die(f"No English PDF attachment on {item_key} to translate.")
+        base_name = english_pdf_basename(item_key) or src.stem
+    else:
+        if not args.pdf:
+            die("Give --key (a Zotero item) or --pdf (a local file) with --local.")
+        src = Path(args.pdf)
+        if not src.is_file():
+            die(f"No such file: {src}")
+        base_name = src.stem
+
+    target_dir = Path(args.out_dir) if args.out_dir else Path(tempfile.mkdtemp(prefix="arxiv2zh-local-"))
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target = target_dir / translated_name(base_name)
+
+    cache = Path.home() / ".cache" / "zotero-plus" / "translation-cache.sqlite3"
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    cmd = [
+        str(engine), str(src), "--output", str(target),
+        "--resource-root", str(engine.parent.parent),
+        "--font-profile", local.get("font_profile") or "notocjk",
+        "--source-language", local.get("source_language") or "en",
+        "--target-language", local.get("target_language") or "zh-Hans",
+        "--provider", "chat-completions",
+        "--base-url", local.get("base_url") or "",
+        "--model", local.get("model"),
+        "--api-key-env", LOCAL_KEY_ENV,
+        "--ocr-mode", local.get("ocr_mode") or "auto",
+        "--concurrency", str(local.get("concurrency") or 4),
+        "--translation-cache-db", str(cache),
+    ]
+    env = engine_env(engine)
+    env[LOCAL_KEY_ENV] = str(local.get("api_key"))
+
+    out(f"Translating {src.name} with {engine.name} ({local.get('model')})…")
+    proc = subprocess.run(cmd, env=env)
+    if proc.returncode != 0:
+        die(f"engine exited {proc.returncode}; the PDF was not attached")
+    if not target.exists() or target.stat().st_size == 0:
+        die("engine produced no output PDF")
+    if target.read_bytes()[:5] != b"%PDF-":
+        die("engine output is not a PDF")
+    out(f"Saved {target} ({target.stat().st_size // 1024} KB)")
+
+    if item_key and not args.no_attach:
+        out(attach_pdf(item_key, target, args.force))
+        if args.open_translation:
+            subprocess.run(["zotero-cli", "open", item_key], check=False)
+    return 0
+
+
 def validate_pdf(data: bytes, name: str) -> None:
     if not data:
         die(f"downloaded file is empty: {name}")
@@ -526,7 +727,7 @@ def validate_pdf(data: bytes, name: str) -> None:
 
 
 def cmd_status(args) -> int:
-    svc = Service(args.service_url, resolve_cookie(args))
+    svc = service_from(args)
     code, data, msg = envelope(svc.get_json(f"/api/arxivStatus/{urllib.parse.quote(args.arxiv_id)}"))
     if code == 101:
         out("login required")
@@ -538,7 +739,7 @@ def cmd_status(args) -> int:
 
 
 def cmd_translate(args) -> int:
-    svc = Service(args.service_url, resolve_cookie(args))
+    svc = service_from(args)
 
     item_key = args.key
     item = get_item(item_key) if item_key else None
@@ -611,7 +812,7 @@ def cmd_translate(args) -> int:
 
 
 def cmd_download(args) -> int:
-    svc = Service(args.service_url, resolve_cookie(args))
+    svc = service_from(args)
     arxiv_id = parse_arxiv_id(args.arxiv_id) or args.arxiv_id
     files = fetch_files(svc, "arxiv", arxiv_id)
     problem = access_problem(files)
@@ -635,7 +836,7 @@ def cmd_download(args) -> int:
 
 
 def cmd_open(args) -> int:
-    svc = Service(args.service_url, None)
+    svc = service_from(args)
     url = f"{svc.base}/arxiv/{urllib.parse.quote(args.arxiv_id)}"
     webbrowser.open(url)
     out(url)
@@ -674,36 +875,53 @@ def cmd_export_cookies(args) -> int:
     if not rows:
         die("No hjfy.top cookie in Zotero's jar. Sign in at https://hjfy.top first "
             "(the plugin's sign-in window, or `arxiv2zh.py login`).")
-    dest = Path(args.cookie_file)
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    with dest.open("w", encoding="utf-8", newline="\n") as fh:
-        fh.write("# Netscape HTTP Cookie File\n")
-        fh.write("# Generated from Zotero's cookie jar for hjfy.top\n\n")
-        for host, path, secure, expiry, name, value in rows:
-            domain_flag = "TRUE" if host.startswith(".") else "FALSE"
-            secure_flag = "TRUE" if secure else "FALSE"
-            fh.write(f"{host}\t{domain_flag}\t{path}\t{secure_flag}\t{expiry}\t{name}\t{value}\n")
-    out(f"Wrote {len(rows)} cookie(s) to {dest}")
-    out("Includes: " + ", ".join(n for _, _, _, _, n, _ in rows))
+    config = load_config(config_path(args))
+    web = config.setdefault("web", {})
+    cookies = dict(web.get("cookies") or {})
+    for _host, _path, _secure, _expiry, name, value in rows:
+        cookies[name] = value
+    web["cookies"] = cookies
+    target = write_config(config, config_path(args))
+    out(f"Wrote {len(cookies)} cookie(s) to {target}")
+    out("Includes: " + ", ".join(cookies))
+    return 0
+
+
+def cmd_config(args) -> int:
+    """Show the config, hiding secrets, and where it lives."""
+    target = config_path(args)
+    config = load_config(target)
+    shown = json.loads(json.dumps(config))
+    for section in ("web", "local"):
+        values = shown.get(section) or {}
+        for key in ("cookies", "api_key"):
+            if isinstance(values.get(key), str) and values[key]:
+                values[key] = "***"
+        if isinstance(values.get("cookies"), dict):
+            values["cookies"] = {k: "***" for k in values["cookies"]}
+    out(f"config: {target}" + ("" if target.exists() else "  (not created yet)"))
+    out(json.dumps(shown, ensure_ascii=False, indent=2))
     return 0
 
 
 def cmd_login(args) -> int:
-    svc = Service(args.service_url, None)
+    svc = service_from(args)
     webbrowser.open(svc.base)
-    out(f"Opened {svc.base}. Sign in there, then either:")
-    out("  - let the script read Zotero's cookies:  --cookie-from-zotero  (default)")
-    out("  - or copy the Cookie header from devtools: --cookie \"k=v; k2=v2\"")
+    out(f"Opened {svc.base}. Sign in there, then write the cookies into:")
+    out(f"  {config_path(args)}  (web.cookies)")
+    out("or re-export them from Zotero's jar:  zotero-plus cookies")
     return 0
 
 
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--service-url", default=os.environ.get("ARXIV2ZH_SERVICE", DEFAULT_SERVICE))
+    p.add_argument("--config", help=f"Config file (default: {DEFAULT_CONFIG_FILE})")
+    p.add_argument("--service-url", default=os.environ.get("ARXIV2ZH_SERVICE"),
+                   help="Override web.service_url from the config")
     p.add_argument("--cookie", default=os.environ.get("ARXIV2ZH_COOKIE"),
-                   help="Cookie header value for hjfy.top")
-    p.add_argument("--cookie-file", default=str(DEFAULT_COOKIE_FILE),
-                   help="Netscape cookie file (default: ~/.config/arxiv2zh/cookies.txt)")
+                   help="Cookie header value for hjfy.top, overriding the config")
+    p.add_argument("--cookie-file", default=None,
+                   help=f"Legacy Netscape cookie file ({LEGACY_COOKIE_FILE})")
     p.add_argument("--no-cookie-from-zotero", dest="cookie_from_zotero",
                    action="store_false", help="Do not read the cookie from Zotero's profile")
     p.set_defaults(cookie_from_zotero=True)
@@ -725,6 +943,9 @@ def main() -> int:
     t.add_argument("--timeout", type=int, default=1800)
     t.add_argument("--unlock", action="store_true",
                    help="Spend the quoted pages to download the whole translation instead of a preview")
+    t.add_argument("--local", action="store_true",
+                   help="Use the local hjfy-pdf engine and the config's API settings instead of hjfy.top")
+    t.add_argument("--pdf", help="With --local: translate this PDF instead of the item's")
     t.set_defaults(func=cmd_translate)
 
     d = sub.add_parser("download", help="Only download the finished Chinese PDF")
@@ -741,10 +962,16 @@ def main() -> int:
     lg = sub.add_parser("login", help="Open the sign-in page")
     lg.set_defaults(func=cmd_login)
 
-    ec = sub.add_parser("export-cookies", help="Export hjfy.top cookies from Zotero to the cookie file")
+    cf = sub.add_parser("config", help="Show the config file and where it lives")
+    cf.set_defaults(func=cmd_config)
+
+    ec = sub.add_parser("export-cookies", help="Import hjfy.top cookies from Zotero into the config")
     ec.set_defaults(func=cmd_export_cookies)
 
     args = p.parse_args()
+    args.config_data = load_config(config_path(args))
+    if getattr(args, "local", False):
+        return cmd_translate_local(args)
     return args.func(args)
 
 

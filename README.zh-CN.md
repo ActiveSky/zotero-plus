@@ -77,16 +77,29 @@ python scripts/zotero_plus.py --help
 python scripts/zotero_plus.py translate --key DMI9KNFZ
 python scripts/zotero_plus.py status 2503.24000
 python scripts/zotero_plus.py translate --arxiv-id 2503.24000 --no-attach --out-dir ./pdfs
+python scripts/zotero_plus.py translate --key DMI9KNFZ --local
+python scripts/zotero_plus.py config
 ```
 
-有 LaTeX 源码的论文匿名即可翻译。没有源码时需要上传本地 PDF，这一步需要
-hjfy.top 登录；cookie 依次从 `~/.config/arxiv2zh/cookies.txt`、`--cookie`、
-Zotero 的 cookie jar 读取。
+一个配置文件 `~/.config/arxiv2zh/config.json` 驱动两种引擎：
+
+| | `web` | `local` |
+|---|---|---|
+| 引擎 | hjfy.top 云端 | 本机 `hjfy-pdf` |
+| 认证 | `web.cookies` | `local.api_key` + `local.model` |
+| 计费 | 页面余额；未解锁只给预览 | 自己的 API 用量 |
 
 未解锁时 hjfy.top 只给**前 5 页预览**，而预览本身是个合法 PDF，不校验就会
 被当成译文挂到条目上。`translate` 和 `download` 现在会直接停下，报出译文总
 页数和解锁价格，不再静默保存。加 `--unlock` 才会从账户余额里扣掉报价页数，
 然后下载完整文件。
+
+`--local` 用 `local.base_url` / `local.model` 跑本机引擎，没有页面余额也没有
+预览。`local.engine` 留空时会自动使用最新的
+`%LOCALAPPDATA%\hjfy-engine\runtime-*`。该运行时需要 MinGW 的
+`libstdc++-6`、`libgcc_s_seh-1`、`libwinpthread-1` 三个 DLL，放在
+`<runtime>\deps\` 下即可；引擎的 `PATH` 由 `bin`、`deps`、`lib` 和
+`System32\downlevel` 组成。
 
 ### 识别会议/期刊与 CCF/CORE
 

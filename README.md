@@ -80,17 +80,30 @@ python scripts/zotero_plus.py --help
 python scripts/zotero_plus.py translate --key DMI9KNFZ
 python scripts/zotero_plus.py status 2503.24000
 python scripts/zotero_plus.py translate --arxiv-id 2503.24000 --no-attach --out-dir ./pdfs
+python scripts/zotero_plus.py translate --key DMI9KNFZ --local
+python scripts/zotero_plus.py config
 ```
 
-Papers with LaTeX source work anonymously. Papers without source require
-uploading the local PDF, which needs a hjfy.top login; the cookie is read from
-`~/.config/arxiv2zh/cookies.txt`, then `--cookie`, then Zotero's cookie jar.
+One config file, `~/.config/arxiv2zh/config.json`, drives both engines:
+
+| | `web` | `local` |
+|---|---|---|
+| Engine | hjfy.top cloud | `hjfy-pdf` on this machine |
+| Auth | `web.cookies` | `local.api_key` + `local.model` |
+| Cost | page balance; locked papers are previews | your own API tokens |
 
 A locked result is a **preview**: hjfy.top serves the first five pages until the
 paper is unlocked, and the preview is a valid PDF that would otherwise be
 attached as if it were the translation. `translate` and `download` stop with the
 translated page count and the price rather than saving it. `--unlock` spends the
 quoted pages from the account balance and then downloads the whole file.
+
+`--local` translates with the hjfy-pdf engine and `local.base_url` /
+`local.model`, so there is no page balance and no preview. Leave `local.engine`
+empty to use the newest `%LOCALAPPDATA%\hjfy-engine\runtime-*`. That runtime
+needs the MinGW DLLs (`libstdc++-6`, `libgcc_s_seh-1`, `libwinpthread-1`) in
+`<runtime>\deps\`; the engine's `PATH` is built from `bin`, `deps`, `lib` and
+`System32\downlevel`.
 
 ### Resolve venue, CCF and CORE
 

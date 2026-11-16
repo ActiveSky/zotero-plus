@@ -13,6 +13,18 @@ All notable changes to this project are documented here. The format follows
   file can be renamed without touching the rest of the library.
 - A scoped run also covers items that have no Chinese translation. A key that
   matches nothing is reported on stderr and exits non-zero.
+- One config file, `~/.config/arxiv2zh/config.json`, replaces
+  `~/.config/arxiv2zh/cookies.txt`. `web` holds the service URL and the
+  cookies; `local` holds the hjfy-pdf engine, its API base URL, key and model.
+  Defaults fill in anything the file omits, and a malformed file warns instead
+  of failing. `cookies` now imports into the config, `--config` points
+  elsewhere, and the old cookie file is still read as a fallback.
+- `translate --local` translates with the hjfy-pdf engine and the config's
+  `local.base_url` / `local.model`, with no page balance and no preview. The
+  engine path is discovered under `%LOCALAPPDATA%\hjfy-engine` when
+  `local.engine` is empty, and its `PATH` is built from `bin`, `deps`, `lib`
+  and `System32\downlevel`.
+- `zotero-plus config` prints the config with cookies and the API key masked.
 - `translate --unlock` and `download --unlock` spend the quoted pages from the
   hjfy.top balance to fetch the whole translation. It is explicit, never implied
   by `--force`, and needs the cookie.
