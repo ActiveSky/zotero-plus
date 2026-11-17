@@ -28,6 +28,9 @@ All notable changes to this project are documented here. The format follows
 - `zotero-plus account` checks that the cookies still work and prints the page
   balance. The website cookie has no refresh flow: hjfy.top reissues nothing on
   API calls, so an expired session only surfaces as `LOGIN_REQUIRED`.
+- `--unlock` sends an `Idempotency-Key`, which `/api/arxivUnlock/` requires and
+  which makes a retry unable to charge twice, and it accepts the endpoint's
+  bare `{"unlocked": true}` answer instead of expecting the usual envelope.
 - `translate --unlock` and `download --unlock` spend the quoted pages from the
   hjfy.top balance to fetch the whole translation. It is explicit, never implied
   by `--force`, and needs the cookie.

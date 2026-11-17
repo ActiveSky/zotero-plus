@@ -37,6 +37,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 import webbrowser
 from pathlib import Path
 
@@ -362,12 +363,15 @@ class Service:
         except Exception as e:
             die(f"{path}: {e}")
 
-    def post_json(self, path: str, payload: dict) -> dict:
+    def post_json(self, path: str, payload: dict, idempotency_key: str | None = None) -> dict:
         body = json.dumps(payload).encode("utf-8")
+        extra = {"Content-Type": "application/json"}
+        if idempotency_key:
+            extra["Idempotency-Key"] = idempotency_key
         req = urllib.request.Request(
             self.base + path,
             data=body,
-            headers=self._headers({"Content-Type": "application/json"}),
+            headers=self._headers(extra),
             method="POST",
         )
         try:
@@ -535,14 +539,18 @@ def unlock_result(svc: Service, kind: str, remote_id: str, files: dict) -> dict:
         die(f"no unlock quote in the result: {files}")
     pages = quote.get("pages")
     out(f"Unlocking {remote_id}" + (f" for {pages} page(s)" if pages else "") + "…")
-    code, _data, msg = envelope(
-        svc.post_json(f"/api/arxivUnlock/{urllib.parse.quote(remote_id)}", {"quoteId": quote_id})
-    )
-    if code == 101:
-        die("hjfy.top requires a login to unlock. Sign in there and put the cookie in "
-            f"{DEFAULT_COOKIE_FILE} (or pass --cookie).")
-    if code != 0:
-        die(f"unlock failed: {msg or code}")
+    # The endpoint bills the account, so it demands an idempotency key: a retry
+    # with the same key cannot charge twice. It answers {"unlocked": true}
+    # rather than the usual {status, data} envelope.
+    raw = svc.post_json(f"/api/arxivUnlock/{urllib.parse.quote(remote_id)}",
+                        {"quoteId": quote_id}, idempotency_key=uuid.uuid4().hex)
+    if str(raw.get("error") or "").upper() == "LOGIN_REQUIRED":
+        die("hjfy.top requires a login to unlock. Sign in there and check web.cookies "
+            f"in {DEFAULT_CONFIG_FILE} (or run `zotero-plus account`).")
+    if isinstance(raw.get("status"), int) and raw["status"] != 0:
+        die(f"unlock failed: {raw.get('msg') or raw['status']}")
+    if raw.get("unlocked") is not True:
+        die(f"unexpected unlock response: {raw}")
     return fetch_files(svc, kind, remote_id)
 
 
