@@ -73,6 +73,27 @@ zotero-plus titles --english --added 2026-10-24 --apply
 folder, so Zotero must be closed for `--apply`. `titles`, `translate`,
 `venue`, `venue-apply` and `venue-undo` work with Zotero open.
 
+When `zotero-plus` is not on PATH — a fresh `npx skills` install does not create
+a launcher — run the router directly:
+
+```powershell
+python "$env:USERPROFILE\.claude\skills\zotero-plus\scripts\zotero_plus.py" venue --help
+```
+
+`venue-apply` and `venue-undo` need the Python that owns `zotero-cli`, and look
+for it in this order: `ZOTERO_MCP_PYTHON`, `uv tool dir` (the answer and its
+`versions/` child), the directory above the `zotero-cli` launcher,
+`~/.local/share/uv/tools`, pipx. **`uv tool dir` points at the `versions/`
+subdirectory on a scoop-managed install, not the tools root**, so both are
+tried; set the env var explicitly when `uv` is off PATH or the venv is hidden:
+
+```powershell
+$env:ZOTERO_MCP_PYTHON = "$env:USERPROFILE\scoop\persist\uv\tools\versions\zotero-mcp-server\Scripts\python.exe"
+```
+
+Without it the command stops with `Cannot import zotero_mcp` before touching
+Zotero.
+
 ## 翻译 (arXiv → 中文 PDF)
 
 Two engines, one config file at `~/.config/arxiv2zh/config.json`:
@@ -152,6 +173,11 @@ Flow: arXiv id → Semantic Scholar batch → OpenReview fallback → DBLP fallb
   `publicationTitle`, publisher, DOI, Extra lines, and tags
   `venue:… year:… CCF:… CORE:… acceptance:accepted cite:…`.
 - `venue-apply` snapshots every item first; `venue-undo` restores it.
+  The plan keeps the target type under `target_item_type`, and apply folds it
+  into the same update as the venue fields — Zotero silently keeps the old type
+  (a tagged `preprint`) when the type is missing from that payload. Apply reads
+  each item back afterwards and counts a type that did not change as a failure,
+  so a "Wrote N" line means the types moved too.
 
 Full options: `zotero-plus venue --help`, `zotero-plus venue-apply --help`.
 

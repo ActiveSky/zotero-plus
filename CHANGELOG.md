@@ -6,6 +6,19 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- `venue-apply` now sends `target_item_type` with the venue fields. It used to
+  write the DOI, the venue and the `venue:…` tags while Zotero kept the item
+  a `preprint`, so a paper ended up tagged with a venue its type contradicted.
+  Apply also reads each item back and counts a type that did not change as a
+  failure instead of reporting success.
+- The `venue-apply` / `venue-undo` re-exec finds the interpreter that owns
+  `zotero-cli` again on a scoop-managed uv install: `uv tool dir` already
+  answers the `versions/` subdirectory there, and appending `versions` a second
+  time left no candidate and failed with `Cannot import zotero_mcp`. The search
+  now also falls back to the `zotero-cli` launcher's parent directory.
+
 ### Added
 
 - `rename-title` takes `--keys` and `--attachment-keys` (comma-separated,

@@ -865,28 +865,64 @@ def ensure_zotero_mcp() -> None:
         "Cannot import zotero_mcp. Set ZOTERO_MCP_PYTHON to the Python that owns zotero-cli.")
 
 
+def _uv_tool_roots():
+    """Directories that may hold uv-installed tool venvs.
+
+    `uv tool dir` answers the tools root on Linux/macOS but the `versions`
+    subdirectory on a scoop-managed Windows install, so the answer itself and
+    its children are both tried.
+    """
+    seen: set[str] = set()
+
+    def fresh(path: Path) -> bool:
+        key = str(path).lower() if os.name == "nt" else str(path)
+        if key in seen:
+            return False
+        seen.add(key)
+        return True
+
+    try:
+        proc = subprocess.run(["uv", "tool", "dir"], capture_output=True, text=True,
+                              encoding="utf-8", errors="replace")
+        if proc.returncode == 0 and proc.stdout.strip():
+            root = Path(proc.stdout.strip())
+            if fresh(root):
+                yield root
+    except Exception:
+        pass
+    # uv writes its launchers to <tools>/shims/, so the shim path leads home.
+    shim = shutil.which("zotero-cli")
+    if shim:
+        root = Path(shim).resolve().parent.parent
+        if fresh(root):
+            yield root
+    root = Path.home() / ".local" / "share" / "uv" / "tools"
+    if fresh(root):
+        yield root
+
+
 def _zotero_python_candidates():
     """Interpreters that may own zotero-cli: explicit env, uv tool, pipx."""
     explicit = os.environ.get("ZOTERO_MCP_PYTHON")
     if explicit:
         yield explicit
-    try:
-        proc = subprocess.run(["uv", "tool", "dir"], capture_output=True, text=True,
-                              encoding="utf-8", errors="replace")
-        if proc.returncode == 0:
-            versions = Path(proc.stdout.strip()) / "versions"
-            for venv in versions.glob("zotero-mcp-server*"):
+    seen: set[str] = set()
+    for root in _uv_tool_roots():
+        for base in (root / "versions", root):
+            if not base.is_dir():
+                continue
+            for venv in sorted(base.glob("zotero-mcp-server*")):
                 for rel in ("Scripts/python.exe", "bin/python", "bin/python3"):
                     p = venv / rel
-                    if p.exists():
+                    if p.exists() and str(p) not in seen:
+                        seen.add(str(p))
                         yield str(p)
-    except Exception:
-        pass
     for base in (Path.home() / ".local" / "share" / "pipx" / "venvs" / "zotero-mcp-server",
                  Path.home() / ".local" / "pipx" / "venvs" / "zotero-mcp-server"):
         for rel in ("Scripts/python.exe", "bin/python"):
             p = base / rel
-            if p.exists():
+            if p.exists() and str(p) not in seen:
+                seen.add(str(p))
                 yield str(p)
 
 
@@ -988,13 +1024,30 @@ def cmd_apply(args) -> int:
     ok = failed = 0
     for r in selected:
         try:
-            msg = zotero_update(r["item_key"], r["fields"], r.get("suggested_tags") or [])
+            fields = dict(r["fields"])
+            # The plan keeps the target type under its own key, so it has to be
+            # folded into the payload: Zotero drops the venue when the same
+            # update does not also change the item type, leaving a "preprint"
+            # tagged venue:ACL.
+            if r.get("target_item_type"):
+                fields.setdefault("item_type", r["target_item_type"])
+            msg = zotero_update(r["item_key"], fields, r.get("suggested_tags") or [])
             if "error" in msg.lower() and "skip" not in msg.lower():
                 print(f"  {r['item_key']}: {msg.strip()[:200]}")
                 failed += 1
-            else:
-                ok += 1
-                print(f"  {r['item_key']}: -> {r['target_item_type']} @ {r.get('canonical')}")
+                continue
+            # Read back: a type change that silently did not stick is worse than
+            # a loud failure, because the tags then claim a venue the item does
+            # not carry.
+            data = zotero_json("get", "metadata", r["item_key"])
+            item = (data.get("data") or {}) if isinstance(data, dict) else {}
+            actual = item.get("itemType")
+            if r.get("target_item_type") and actual and actual != r["target_item_type"]:
+                print(f"  {r['item_key']}: type stayed {actual}, wanted {r['target_item_type']}")
+                failed += 1
+                continue
+            ok += 1
+            print(f"  {r['item_key']}: -> {r['target_item_type']} @ {r.get('canonical')}")
         except Exception as exc:
             failed += 1
             print(f"  {r['item_key']}: failed: {exc}")
