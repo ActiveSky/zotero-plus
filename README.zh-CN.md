@@ -106,6 +106,12 @@ hjfy.top 不会在 API 请求里重发 cookie，过期后接口直接返回 `LOG
 `<runtime>\deps\` 下即可；引擎的 `PATH` 由 `bin`、`deps`、`lib` 和
 `System32\downlevel` 组成。
 
+`local.thinking_mode` 决定用哪种方式告诉网关关闭推理，各家字段名不一样：
+`reasoning-none` 发 `reasoning_effort: "none"`（OpenAI 系），
+`thinking-disabled` 发 `thinking: {"type": "disabled"}`（Anthropic / 方舟 /
+GLM），`enable-thinking-false` 发 `enable_thinking: false`（Qwen / vLLM），
+`service-default` 不加任何字段。推理模型开着思考时每段要慢好几倍。
+
 ### 识别会议/期刊与 CCF/CORE
 
 ```bash

@@ -66,6 +66,10 @@ CONFIG_DEFAULTS: dict = {
         "font_profile": "notocjk",
         "ocr_mode": "auto",
         "concurrency": 4,
+        # The engine's own switch: service-default, enable-thinking-false,
+        # thinking-disabled or reasoning-none. Each gateway spells "no thinking"
+        # differently, so the right value depends on local.base_url.
+        "thinking_mode": "service-default",
     },
 }
 
@@ -691,6 +695,10 @@ def cmd_translate_local(args) -> int:
 
     cache = Path.home() / ".cache" / "zotero-plus" / "translation-cache.sqlite3"
     cache.parent.mkdir(parents=True, exist_ok=True)
+
+    thinking = (getattr(args, "thinking_mode", None)
+                or local.get("thinking_mode") or "service-default")
+
     cmd = [
         str(engine), str(src), "--output", str(target),
         "--resource-root", str(engine.parent.parent),
@@ -698,6 +706,7 @@ def cmd_translate_local(args) -> int:
         "--source-language", local.get("source_language") or "en",
         "--target-language", local.get("target_language") or "zh-Hans",
         "--provider", "chat-completions",
+        "--thinking-mode", thinking,
         "--base-url", local.get("base_url") or "",
         "--model", local.get("model"),
         "--api-key-env", LOCAL_KEY_ENV,
@@ -708,7 +717,7 @@ def cmd_translate_local(args) -> int:
     env = engine_env(engine)
     env[LOCAL_KEY_ENV] = str(local.get("api_key"))
 
-    out(f"Translating {src.name} with {engine.name} ({local.get('model')})…")
+    out(f"Translating {src.name} with {engine.name} ({local.get('model')}, thinking={thinking})…")
     proc = subprocess.run(cmd, env=env)
     if proc.returncode != 0:
         die(f"engine exited {proc.returncode}; the PDF was not attached")
@@ -984,6 +993,11 @@ def main() -> int:
     t.add_argument("--local", action="store_true",
                    help="Use the local hjfy-pdf engine and the config's API settings instead of hjfy.top")
     t.add_argument("--pdf", help="With --local: translate this PDF instead of the item's")
+    t.add_argument("--thinking-mode",
+                   choices=["service-default", "enable-thinking-false",
+                            "thinking-disabled", "reasoning-none"],
+                   help="With --local: how to switch thinking off at the gateway "
+                        "(overrides local.thinking_mode)")
     t.set_defaults(func=cmd_translate)
 
     d = sub.add_parser("download", help="Only download the finished Chinese PDF")

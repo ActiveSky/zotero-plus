@@ -24,6 +24,12 @@ All notable changes to this project are documented here. The format follows
   engine path is discovered under `%LOCALAPPDATA%\hjfy-engine` when
   `local.engine` is empty, and its `PATH` is built from `bin`, `deps`, `lib`
   and `System32\downlevel`.
+- `translate --local` takes `--thinking-mode` and reads `local.thinking_mode`,
+  which passes the engine's own switch (`service-default`,
+  `enable-thinking-false`, `thinking-disabled`, `reasoning-none`). Each vendor
+  spells "no thinking" differently — `reasoning_effort: "none"`,
+  `thinking: {"type": "disabled"}`, `enable_thinking: false` — and a reasoning
+  model spends several times longer per segment with thinking left on.
 - `zotero-plus config` prints the config with cookies and the API key masked.
 - `zotero-plus account` checks that the cookies still work and prints the page
   balance. The website cookie has no refresh flow: hjfy.top reissues nothing on

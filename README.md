@@ -111,6 +111,13 @@ needs the MinGW DLLs (`libstdc++-6`, `libgcc_s_seh-1`, `libwinpthread-1`) in
 `<runtime>\deps\`; the engine's `PATH` is built from `bin`, `deps`, `lib` and
 `System32\downlevel`.
 
+`local.thinking_mode` picks how to switch reasoning off, because each vendor
+spells it differently: `reasoning-none` adds `reasoning_effort: "none"`
+(OpenAI), `thinking-disabled` adds `thinking: {"type": "disabled"}`
+(Anthropic/ARK/GLM), `enable-thinking-false` adds `enable_thinking: false`
+(Qwen/vLLM), and `service-default` adds nothing. Reasoning models spend several
+times longer per segment with thinking on.
+
 ### Resolve venue, CCF and CORE
 
 ```bash

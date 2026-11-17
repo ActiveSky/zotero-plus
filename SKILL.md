@@ -120,6 +120,21 @@ before a translation does.
 them in `<runtime>\deps\`; the engine's own `PATH` is built from `bin`, `deps`,
 `lib` and `System32\downlevel`.
 
+`local.thinking_mode` (or `--thinking-mode`) picks how the gateway is told to
+stop reasoning. Every vendor spells it differently and the engine sends exactly
+one field:
+
+| Value | Body it adds | Convention |
+|---|---|---|
+| `reasoning-none` | `reasoning_effort: "none"` | OpenAI-compatible |
+| `thinking-disabled` | `thinking: {"type": "disabled"}` | Anthropic / ARK / GLM |
+| `enable-thinking-false` | `enable_thinking: false` | Qwen / vLLM |
+| `service-default` | nothing | gateway default |
+
+A reasoning model spends several times longer per segment with thinking on, so
+set the value `local.base_url` actually honors. `reasoning-none` measured ~2×
+faster than the default on deepseek-flash.
+
 Full options: `zotero-plus translate --help`.
 
 ## 会议/期刊 (venue, CCF, CORE)
