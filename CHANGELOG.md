@@ -56,6 +56,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- `rename-title` no longer turns a linked attachment into a stored one. It
+  moved the file into `storage/<key>/` and wrote a `storage:` path while
+  leaving `linkMode` at 2 (linked), so Zotero could not resolve the file. A
+  linked PDF is now renamed in place and keeps its absolute path.
 - `translate` and `download` no longer attach a 5-page preview as if it were the
   translation. hjfy.top reports `isPreview` / `accessSource: "preview"` /
   `canReadFullPdf: false` for a paper that is not unlocked, and the preview is a

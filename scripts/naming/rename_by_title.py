@@ -149,9 +149,13 @@ def build_plan(con: sqlite3.Connection, keys: set[str] | None = None,
 
     by_parent: dict[str, list] = {}
     for pkey, pid, title, akey, aid, path in rows:
+        # A linked attachment keeps an absolute path and must stay linked; only
+        # `storage:` paths name a file inside the attachment's own folder.
+        linked = not path.startswith("storage:")
         by_parent.setdefault(pkey, []).append(
             {"pkey": pkey, "parent_id": pid, "title": title, "key": akey,
-             "item_id": aid, "old": path[len("storage:"):] if path.startswith("storage:") else path}
+             "item_id": aid, "linked": linked,
+             "old": path if linked else path[len("storage:"):]}
         )
 
     plan = []
@@ -168,7 +172,9 @@ def build_plan(con: sqlite3.Connection, keys: set[str] | None = None,
             new = f"{base}_zh_CN.pdf"
             plan.append({**a, "new": new, "kind": "zh", "wanted_title": new[:-4]})
     for row in plan:
-        row["status"] = "already correct" if row["old"] == row["new"] else "rename"
+        # A linked attachment carries an absolute path, so compare filenames.
+        current = Path(row["old"]).name
+        row["status"] = "already correct" if current == row["new"] else "rename"
     return plan
 
 
@@ -259,9 +265,15 @@ def main() -> int:
     con = sqlite3.connect(db)
     try:
         for r in todo:
-            att_dir = storage / r["key"]
-            old_file = att_dir / r["old"]
-            new_file = att_dir / r["new"]
+            if r.get("linked"):
+                # Rename beside the original file and keep the absolute path,
+                # so a linked attachment stays linked.
+                old_file = Path(r["old"])
+                new_file = old_file.with_name(r["new"])
+            else:
+                att_dir = storage / r["key"]
+                old_file = att_dir / r["old"]
+                new_file = att_dir / r["new"]
             if not old_file.exists():
                 print(f"  {r['key']}: missing on disk: {r['old']}")
                 failed += 1
@@ -272,8 +284,9 @@ def main() -> int:
                 continue
             try:
                 os.replace(old_file, new_file)
+                stored = str(new_file) if r.get("linked") else f"storage:{r['new']}"
                 con.execute("UPDATE itemAttachments SET path=? WHERE itemID=?",
-                            (f"storage:{r['new']}", r["item_id"]))
+                            (stored, r["item_id"]))
                 set_title(con, r["item_id"], r["wanted_title"])
                 con.execute("UPDATE items SET synced=0 WHERE itemID=?", (r["item_id"],))
                 ok += 1
