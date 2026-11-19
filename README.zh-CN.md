@@ -20,6 +20,7 @@ CCF/CORE 等级、检查 arXiv 新版本、查找正式发表版与开放获取 
 | 会议/期刊 | `venue` `venue-apply` `venue-undo` | Semantic Scholar → OpenReview → DBLP，附带 CCF/CORE 等级 |
 | 工作流 | `arxiv-version` `find` `pdf` | arXiv 版本检查、正式发表版发现、开放获取 PDF |
 | 附件整理 | `rename-title` `rename-zh` `rename-en` `titles` | 纯标题命名、标题与文件名对齐 |
+| PDF 书签 | `outline` | 从正文重建三级目录；`--jasminum` 顺带补齐茉莉花的 `jasminum-outline.json` |
 
 所有操作都走 `zotero-cli`，不需要安装任何 Zotero 插件。
 
@@ -162,6 +163,32 @@ python scripts/zotero_plus.py titles --english --added 2026-10-24 --apply
 `~/.cache/zotero-plus/backups/`（只保留最新 3 份），并且要求关闭 Zotero。
 `ZOTERO_PLUS_STATE_DIR` 可以改这个位置。skill 目录内不写任何运行时数据，因为
 `npx skills` 更新时会整个替换掉该目录。
+
+### PDF 书签
+
+```bash
+python scripts/zotero_plus.py outline --keys DMI9KNFZ            # 预览
+python scripts/zotero_plus.py outline --keys DMI9KNFZ --apply    # 写进 PDF
+python scripts/zotero_plus.py outline --keys DMI9KNFZ --apply --jasminum
+python scripts/zotero_plus.py outline --attachment-keys BI78XU9F --apply
+python scripts/zotero_plus.py outline --path paper.pdf --apply
+```
+
+从正文里识别 `1` / `2.1` / `3.1.2` 编号标题、`A 评估细节` 这类附录、以及
+`Abstract`、`参考文献` 这种无编号大字标题，按点号层数定级；编号和标题被 LaTeX
+拆成两行时会合并，跨行标题也会接回去。单栏、双栏都处理，默认最多三级，
+`--max-level 2` 可以只要到二级。已有书签的 PDF 除非加 `--force`，否则不动。
+
+`--apply` 先把 PDF 备份到 `~/.cache/zotero-plus/pdf-backups/`（每个文件保留最新
+3 份）再原地替换；Zotero 阅读器要是正开着这篇，Windows 会占用文件句柄，需要先
+关掉该标签页。扫描版没有文字层，得先 OCR。
+
+`--jasminum` 会顺带写 PDF 同目录的 `jasminum-outline.json`（茉莉花插件的
+`{level, title, page, x, y, children, collapsed}` 结构）。这个开关有实际意义：
+茉莉花第一次打开附件时若 PDF 没有书签，会把空数组写进这个文件，之后**永远**只读
+缓存、不再解析 PDF——所以它的“大纲”面板即使 PDF 已有书签也可能一直空着。
+`--jasminum` 按 PDF 坐标系（左下原点）写 `y`，因为插件用 `goToDestination`
+跳转，而不是它自己保存时用的视口坐标。
 
 ## 数据来源
 

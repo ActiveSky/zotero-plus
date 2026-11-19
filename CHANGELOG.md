@@ -21,6 +21,19 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `outline` rebuilds a 1–3 level PDF outline from the page text and writes it
+  as real bookmarks, for the papers that ship without one (arXiv, MLSys,
+  machine-translated copies). Numbered headings give the level, `A Evaluation
+  Details` appendices and unnumbered banners (`Abstract`, `参考文献`) are
+  recognised, a number printed on its own line is joined to its title, and a
+  wrapped heading is joined back. Single- and two-column layouts are handled;
+  an existing outline is left alone unless `--force`. `--apply` backs the PDF
+  up to `~/.cache/zotero-plus/pdf-backups/` first.
+- `outline --jasminum` also writes `jasminum-outline.json` beside the PDF, in
+  the schema the Jasminum plugin reads. The plugin caches that sidecar on first
+  open and never re-reads the PDF afterwards, so an empty `{"outline":[]}` left
+  behind by an earlier run keeps its outline pane blank forever; the flag
+  rewrites the file from the PDF's actual outline.
 - `rename-title` takes `--keys` and `--attachment-keys` (comma-separated,
   case-insensitive) to scope a run to specific items or attachments, so one
   file can be renamed without touching the rest of the library.

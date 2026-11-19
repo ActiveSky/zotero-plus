@@ -26,6 +26,7 @@ One command surface for three jobs that all drive `zotero-cli`:
 | | `rename-zh` | Chinese PDF filename = English PDF name + `_zh_CN` |
 | | `rename-en` | English PDF filename = item title (one day's imports) |
 | | `titles` | align attachment titles (Chinese: filename; English: paper title) |
+| | `outline` | rebuild a 1–3 level PDF outline (书签/目录) from the text; `--jasminum` also fills the Jasminum sidecar |
 
 `zotero-plus` itself is a thin router (`scripts/zotero_plus.py`); each command
 maps to one of the real scripts. `zotero-plus <command> --help` shows that
@@ -57,6 +58,11 @@ zotero-plus rename-title --keys DMI9KNFZ  # preview a single item
 zotero-plus rename-title --apply        # requires Zotero closed
 zotero-plus titles
 zotero-plus titles --english --added 2026-10-24 --apply
+
+# Bookmarks (PDF outline)
+zotero-plus outline --keys DMI9KNFZ                  # preview
+zotero-plus outline --keys DMI9KNFZ --apply          # write bookmarks
+zotero-plus outline --keys DMI9KNFZ --apply --jasminum
 ```
 
 ## Prerequisites
@@ -67,11 +73,15 @@ zotero-plus titles --english --added 2026-10-24 --apply
 - Python 3.10+ (standard library only for most commands; `venue-apply` and
   `venue-undo` import `zotero_mcp` and re-exec into its interpreter by
   themselves).
+- `outline` needs PyMuPDF (`pip install pymupdf`); every other command runs on
+  the standard library.
 - Network for hjfy.top, Semantic Scholar, OpenReview, DBLP, Crossref.
 
 `rename-zh` and `rename-en` edit Zotero's SQLite database and the storage
-folder, so Zotero must be closed for `--apply`. `titles`, `translate`,
-`venue`, `venue-apply` and `venue-undo` work with Zotero open.
+folder, so Zotero must be closed for `--apply`. `outline --apply` rewrites a
+PDF in place, so the tab showing that file must be closed (Zotero itself can
+stay open). `titles`, `translate`, `venue`, `venue-apply` and `venue-undo` work
+with Zotero open.
 
 When `zotero-plus` is not on PATH — a fresh `npx skills` install does not create
 a launcher — run the router directly:
@@ -282,6 +292,57 @@ writing, keeping only the newest 3 backups. `ZOTERO_PLUS_STATE_DIR` overrides
 the location. Runtime state never goes inside the skill directory, because
 `npx skills` replaces that directory on update.
 
+### `outline` — 给没有书签的 PDF 补目录
+
+arXiv preprints, MLSys proceedings, and machine-translated copies often ship
+with no `/Outlines` tree, so the reader's outline pane stays empty and nothing
+is clickable. `outline` rebuilds a 1–3 level outline from the page text and
+writes it as real PDF bookmarks, which every reader honours (WPS, Acrobat,
+Zotero's own 大纲 pane).
+
+```powershell
+zotero-plus outline --keys DMI9KNFZ                    # preview the tree
+zotero-plus outline --keys DMI9KNFZ --apply            # write PDF bookmarks
+zotero-plus outline --keys DMI9KNFZ --apply --jasminum # + Jasminum sidecar
+zotero-plus outline --attachment-keys BI78XU9F --apply # one file
+zotero-plus outline --path .\paper.pdf --apply         # outside Zotero
+```
+
+How headings are found:
+
+| Signal | Rule |
+|---|---|
+| numbering | `1` / `2.1` / `3.1.2` at a column's left edge, level = dot count + 1 |
+| emphasis | the line is bold or set larger than the body font |
+| abbreviations | `A Evaluation Details`, `A.1 Dataset`; `Abstract`, `参考文献`, `致谢` |
+| split runs | a bare `2` or `3.1` on its own line is joined to the title below it |
+| wrapped titles | a heading that continues on the next line is joined back |
+
+False positives are filtered by requiring the title to start with a word (not a
+digit or punctuation), by dropping table/figure captions, and by ignoring
+running headers, page numbers, and algorithm-pseudocode line numbers. Both
+single- and two-column layouts are handled; `--max-level 2` stops at sections.
+
+- A PDF that already has bookmarks is left alone unless `--force` rebuilds it
+  from the text.
+- `--apply` copies the PDF to `~/.cache/zotero-plus/pdf-backups/` first (newest
+  3 per file are kept) and then replaces it. Close the tab in Zotero for that
+  file or Windows keeps the handle open.
+- A scanned PDF has no text to read — run OCR first.
+
+**`--jasminum`** fills `jasminum-outline.json` next to the PDF, in the schema
+the Jasminum (茉莉花) plugin reads: `{info:{itemID, schema:2, baseFontSize},
+outline:[{level, title, page, x, y, children, collapsed}]}`. It matters because
+the plugin caches that file on first open and **never re-reads the PDF once the
+file exists** — an empty `{"outline":[]}` is remembered forever, which is why
+its 大纲 panel can stay empty even for a PDF that has bookmarks. When the
+sidecar already holds an outline, `--jasminum` rewrites it from the PDF;
+`y` is converted to PDF space (origin bottom-left) because the plugin navigates
+with `goToDestination`, not the viewport coordinates it saves itself.
+
+The plugin is an alternate path, not a replacement: Zotero's native pane reads
+the PDF directly, so `--apply` alone fixes every reader except Jasminum's.
+
 ## Upstream sources
 
 | What | Where | Ported version | License |
@@ -329,6 +390,7 @@ scripts/
   naming/rename_attachments.py rename-zh
   naming/rename_english.py    rename-en
   naming/update_titles.py     titles
+  outline/add_outline.py      outline (PDF bookmarks + Jasminum sidecar)
   workflow/main.py            arxiv-version / find / pdf
   workflow/common.py          zotero-cli, HTTP, arXiv id, title matching
   workflow/arxiv_version.py   version comparison and download

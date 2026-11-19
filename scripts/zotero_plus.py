@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """One entry point for the Zotero helpers in this skill.
 
-The real work lives in four scripts; this file only routes:
+The real work lives in a handful of scripts; this file only routes:
 
     zotero-plus translate  ...   arXiv -> Chinese PDF through hjfy.top
     zotero-plus venue      ...   resolve arXiv preprints to their published venue
     zotero-plus rename-zh  ...   rename Chinese PDFs to match the English PDF
     zotero-plus rename-en  ...   rename English PDFs to match the item title
     zotero-plus titles     ...   make attachment titles match filenames/titles
+    zotero-plus outline    ...   write PDF bookmarks (and the Jasminum sidecar)
 
 Run `zotero-plus <command> --help` to see that command's own options.
 """
@@ -44,6 +45,8 @@ ROUTES: dict[str, tuple[str, str | None]] = {
     "rename-en": ("naming/rename_english.py", None),
     "rename-title": ("naming/rename_by_title.py", None),
     "titles": ("naming/update_titles.py", None),
+    # PDF bookmarks (outline)
+    "outline": ("outline/add_outline.py", None),
 }
 
 GROUPS = {
@@ -51,6 +54,7 @@ GROUPS = {
     "会议/期刊 (venue, CCF, CORE)": ["venue", "venue-apply", "venue-undo"],
     "工作流 (版本 / 正式发表版 / 开放 PDF)": ["arxiv-version", "find", "pdf"],
     "附件命名与标题": ["rename-title", "rename-zh", "rename-en", "titles"],
+    "PDF 书签 (目录)": ["outline"],
 }
 
 
@@ -76,6 +80,7 @@ def usage() -> str:
         "  zotero-plus venue-apply --plan ~/.cache/zotero-plus/plan-*.json --yes",
         "  zotero-plus rename-title --keys DMI9KNFZ",
         "  zotero-plus titles --english --added 2026-10-24",
+        "  zotero-plus outline --keys DMI9KNFZ --jasminum",
         "",
         "Run `zotero-plus <command> --help` for that command's options.",
     ]

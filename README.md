@@ -21,6 +21,7 @@ and titles consistent.
 | Venue | `venue` `venue-apply` `venue-undo` | Semantic Scholar → OpenReview → DBLP, plus CCF/CORE tiers |
 | Workflow | `arxiv-version` `find` `pdf` | arXiv version checks, published-version discovery, open-access PDFs |
 | Naming | `rename-title` `rename-zh` `rename-en` `titles` | Title-based filenames and consistent attachment titles |
+| Bookmarks | `outline` | Rebuild a 3-level PDF outline from the text; `--jasminum` also fills the Jasminum sidecar |
 
 Everything goes through `zotero-cli`; no Zotero plugin is required.
 
@@ -170,6 +171,35 @@ translation. A key that matches nothing exits non-zero.
 database to `~/.cache/zotero-plus/backups/` (newest 3 kept), and requires
 Zotero to be closed. `ZOTERO_PLUS_STATE_DIR` overrides the location. Nothing
 is written inside the skill directory, which `npx skills` replaces on update.
+
+### PDF bookmarks
+
+```bash
+python scripts/zotero_plus.py outline --keys DMI9KNFZ            # preview
+python scripts/zotero_plus.py outline --keys DMI9KNFZ --apply    # write the PDF
+python scripts/zotero_plus.py outline --keys DMI9KNFZ --apply --jasminum
+python scripts/zotero_plus.py outline --attachment-keys BI78XU9F --apply
+python scripts/zotero_plus.py outline --path paper.pdf --apply
+```
+
+Headings are read from the text: `1` / `2.1` / `3.1.2` numbering at a column's
+left edge (level = dot count + 1), `A Evaluation Details` appendices, and
+unnumbered banners such as `Abstract` or `References` set larger than the body.
+A number printed on its own line is joined to its title, and a wrapped heading
+is joined back. Single- and two-column layouts both work; `--max-level 2` stops
+at sections. A PDF that already has bookmarks is left alone unless `--force`.
+
+`--apply` copies the PDF to `~/.cache/zotero-plus/pdf-backups/` (newest 3 per
+file kept) before replacing it; close that tab in Zotero first, or Windows keeps
+the file handle. Scanned PDFs need OCR before they have any text to read.
+
+`--jasminum` also writes `jasminum-outline.json` beside the PDF in the schema
+the Jasminum plugin reads. That switch exists because the plugin caches the
+sidecar the first time it opens an attachment and **never re-reads the PDF once
+the file exists** — an empty `{"outline":[]}` is remembered forever, so its
+outline pane can stay blank even for a PDF that has bookmarks. `y` is written in
+PDF coordinates (origin bottom-left) because the plugin navigates with
+`goToDestination`, unlike the viewport coordinates it saves itself.
 
 ## Data sources
 
