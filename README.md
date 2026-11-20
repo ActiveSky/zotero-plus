@@ -119,6 +119,26 @@ spells it differently: `reasoning-none` adds `reasoning_effort: "none"`
 (Qwen/vLLM), and `service-default` adds nothing. Reasoning models spend several
 times longer per segment with thinking on.
 
+The engine has ~126 options. The common ones are switches, the rest go through
+a repeatable `--engine-arg`:
+
+```bash
+python scripts/zotero_plus.py translate --key KEY --local --dry-run      # print the command
+python scripts/zotero_plus.py translate --key KEY --local --pages 1-10
+python scripts/zotero_plus.py translate --key KEY --local --bilingual
+python scripts/zotero_plus.py translate --key KEY --local --output-format=pdf-docx
+python scripts/zotero_plus.py translate --key KEY --local --engine-arg=--min-font-scale=0.8
+```
+
+Precedence is `local.extra_args` → named switch → `--engine-arg`. Options the
+script sets itself (`--output`, `--api-key-env`, `--model`, `--base-url`, …) are
+rejected rather than silently ignored.
+
+**Tables stay untranslated by default**: `local.translate_tables` ships as
+`off`, because a mistranslated results table costs more than an untranslated
+one. Set it to `auto` (prose-heavy tables only) or `on`, or pass
+`--translate-tables=auto` for one run.
+
 ### Resolve venue, CCF and CORE
 
 ```bash

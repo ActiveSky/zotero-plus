@@ -113,6 +113,24 @@ hjfy.top 不会在 API 请求里重发 cookie，过期后接口直接返回 `LOG
 GLM），`enable-thinking-false` 发 `enable_thinking: false`（Qwen / vLLM），
 `service-default` 不加任何字段。推理模型开着思考时每段要慢好几倍。
 
+引擎有 126 个参数，常用的一部分做成了开关，其余走 `--engine-arg`：
+
+```bash
+python scripts/zotero_plus.py translate --key KEY --local --dry-run       # 只打印命令
+python scripts/zotero_plus.py translate --key KEY --local --pages 1-10
+python scripts/zotero_plus.py translate --key KEY --local --bilingual
+python scripts/zotero_plus.py translate --key KEY --local --output-format=pdf-docx
+python scripts/zotero_plus.py translate --key KEY --local --engine-arg=--min-font-scale=0.8
+```
+
+优先级 `local.extra_args` → 具名开关 → `--engine-arg`，后者覆盖前者。脚本自己
+设置的参数（`--output`、`--api-key-env`、`--model`、`--base-url` 等）会被拒绝，
+而不是静默忽略。
+
+**表格默认不翻译**：`local.translate_tables` 默认 `off`，结果表的单元格保持
+原文——机翻数字表的风险大于收益。需要时改成 `auto`（只翻以文字为主的表）或
+`on`，也可以单次用 `--translate-tables=auto`。
+
 ### 识别会议/期刊与 CCF/CORE
 
 ```bash

@@ -70,6 +70,15 @@ CONFIG_DEFAULTS: dict = {
         # thinking-disabled or reasoning-none. Each gateway spells "no thinking"
         # differently, so the right value depends on local.base_url.
         "thinking_mode": "service-default",
+        # Table cells stay in the source language unless asked otherwise: the
+        # engine's own default is "auto", which translates prose-heavy tables
+        # and leaves numeric ones alone, but a mistranslated result table costs
+        # more than an untranslated one. auto/on/off, as the engine spells them.
+        "translate_tables": "off",
+        # Raw hjfy-pdf options appended to every run (`"--pages=1-10"`, ...).
+        # Options the script sets itself are rejected, so a stale entry cannot
+        # silently steal the output path or the credentials.
+        "extra_args": [],
     },
 }
 
@@ -665,6 +674,88 @@ def engine_env(engine: Path) -> dict:
     return env
 
 
+# Options the script always sets itself. Repeating one of these would make the
+# run depend on argv order, and for --output/--api-key-env it would be wrong,
+# so they are a hard error rather than a silent override.
+ENGINE_RESERVED = {
+    "-o", "--output", "--output-dir", "--resource-root", "--api-key-env",
+    "--translation-cache-db", "--base-url", "--model", "--provider",
+    "--source-language", "--target-language", "--font-profile", "--ocr-mode",
+    "--concurrency", "--thinking-mode",
+}
+
+
+def named_engine_args(args) -> list[str]:
+    """The convenience switches, turned into the engine's own options."""
+    extra: list[str] = []
+    if getattr(args, "pages", None):
+        extra.append(f"--pages={args.pages}")
+    if getattr(args, "pdf_mode", None):
+        extra.append(f"--pdf-mode={args.pdf_mode}")
+    if getattr(args, "bilingual", False):
+        extra.append("--pdf-bilingual=true")
+    if getattr(args, "bilingual_order", None):
+        extra.append(f"--pdf-bilingual-order={args.bilingual_order}")
+    if getattr(args, "translate_tables", None):
+        extra.append(f"--translate-tables={args.translate_tables}")
+    if getattr(args, "translate_bookmarks", None) is not None:
+        extra.append(f"--translate-bookmarks={'true' if args.translate_bookmarks else 'false'}")
+    if getattr(args, "output_format", None):
+        extra.append(f"--output-format={args.output_format}")
+    for path in getattr(args, "terminology", None) or []:
+        extra.append(f"--terminology={path}")
+    if getattr(args, "request_timeout", None):
+        extra.append(f"--request-timeout={args.request_timeout}")
+    if getattr(args, "on_page_error", None):
+        extra.append(f"--on-page-error={args.on_page_error}")
+    return extra
+
+
+ENGINE_REPEATABLE = {"--terminology"}
+
+
+def last_wins(items: list[str]) -> list[str]:
+    """Drop earlier occurrences of a single-value option, keeping the last one.
+
+    The engine would honour the last value anyway; removing the dead entries
+    keeps the printed command (and the bug report) readable.
+    """
+    kept: list[str] = []
+    seen: set[str] = set()
+    for item in reversed(items):
+        option = item.split("=", 1)[0]
+        if option in ENGINE_REPEATABLE or option not in seen:
+            kept.append(item)
+            seen.add(option)
+    return list(reversed(kept))
+
+
+def engine_extras(args, local: dict) -> list[str]:
+    """Engine options beyond the fixed set, lowest precedence first.
+
+    Order is config default -> local.extra_args -> named switches ->
+    --engine-arg. The engine keeps the last value for a repeated single-value
+    option, so the command line always wins over the config file.
+    """
+    merged: list[str] = []
+    tables = local.get("translate_tables")
+    if tables:
+        merged.append(f"--translate-tables={tables}")
+    merged += [str(a) for a in (local.get("extra_args") or [])]
+    merged += named_engine_args(args)
+    merged += [str(a) for a in (getattr(args, "engine_arg", None) or [])]
+
+    for item in merged:
+        option = item.split("=", 1)[0].strip()
+        if not item.startswith("--") or any(ch.isspace() for ch in item):
+            die(f"--engine-arg takes one option per value, got {item!r}; "
+                "write --engine-arg=--pages=1-10, not --engine-arg \"--pages 1-10\"")
+        if option in ENGINE_RESERVED:
+            die(f"{option} is set by zotero-plus itself and cannot be passed through; "
+                "use the matching config key or command option instead")
+    return last_wins(merged)
+
+
 def cmd_translate_local(args) -> int:
     config = getattr(args, "config_data", None) or load_config(config_path(args))
     local = config.get("local") or {}
@@ -714,8 +805,18 @@ def cmd_translate_local(args) -> int:
         "--concurrency", str(local.get("concurrency") or 4),
         "--translation-cache-db", str(cache),
     ]
+    extras = engine_extras(args, local)
+    cmd += extras
     env = engine_env(engine)
     env[LOCAL_KEY_ENV] = str(local.get("api_key"))
+
+    if getattr(args, "dry_run", False):
+        # The key travels in the environment, never in argv, so the printed
+        # command is safe to paste into a bug report.
+        printable = " ".join(f'"{a}"' if " " in a else a for a in cmd)
+        out(f"engine: {printable}")
+        out(f"env: {LOCAL_KEY_ENV}=<local.api_key>")
+        return 0
 
     out(f"Translating {src.name} with {engine.name} ({local.get('model')}, thinking={thinking})…")
     proc = subprocess.run(cmd, env=env)
@@ -726,6 +827,16 @@ def cmd_translate_local(args) -> int:
     if target.read_bytes()[:5] != b"%PDF-":
         die("engine output is not a PDF")
     out(f"Saved {target} ({target.stat().st_size // 1024} KB)")
+
+    # --output-format=pdf-docx also writes a sibling Office file; report it so
+    # it is not left unnoticed in the temporary output directory.
+    for ext in (".docx", ".pptx"):
+        sibling = target.with_suffix(ext)
+        if sibling.exists():
+            out(f"Also wrote {sibling} ({sibling.stat().st_size // 1024} KB)")
+    if getattr(args, "pages", None):
+        out("note: only the selected pages are translated; the attachment still "
+            "holds the whole document, with the other pages left in the source language")
 
     if item_key and not args.no_attach:
         out(attach_pdf(item_key, target, args.force))
@@ -998,6 +1109,32 @@ def main() -> int:
                             "thinking-disabled", "reasoning-none"],
                    help="With --local: how to switch thinking off at the gateway "
                         "(overrides local.thinking_mode)")
+    g = t.add_argument_group("local engine pass-through")
+    g.add_argument("--engine-arg", action="append", metavar="OPT=VAL",
+                   help="With --local: repeatable raw hjfy-pdf option, one per value "
+                        "(--engine-arg=--pages=1-10). Options zotero-plus sets itself are rejected")
+    g.add_argument("--pages", help="With --local: translate only these pages, 1,5-10")
+    g.add_argument("--pdf-mode",
+                   choices=["auto", "preserve", "reflow-translated", "reflow-bilingual"],
+                   help="With --local: PDF layout. preserve keeps the source layout")
+    g.add_argument("--bilingual", action="store_true",
+                   help="With --local: interleave original and translated pages")
+    g.add_argument("--bilingual-order", choices=["original-first", "translated-first"],
+                   help="With --local and --bilingual: order inside each page pair")
+    g.add_argument("--translate-tables", choices=["auto", "on", "off"],
+                   help="With --local: table cells (overrides local.translate_tables, default off)")
+    g.add_argument("--translate-bookmarks", action=argparse.BooleanOptionalAction, default=None,
+                   help="With --local: translate PDF bookmark titles (engine default: on)")
+    g.add_argument("--output-format", choices=["pdf", "pdf-docx", "pdf-pptx"],
+                   help="With --local: also emit a sibling Word or PowerPoint file")
+    g.add_argument("--terminology", action="append", metavar="CSV",
+                   help="With --local: terminology CSV, repeatable (merged in order)")
+    g.add_argument("--request-timeout", type=int, metavar="SECONDS",
+                   help="With --local: end-to-end timeout for one HTTP request")
+    g.add_argument("--on-page-error", choices=["fail", "keep-original"],
+                   help="With --local: what to do when one page cannot be translated safely")
+    g.add_argument("--dry-run", action="store_true",
+                   help="With --local: print the engine command instead of running it")
     t.set_defaults(func=cmd_translate)
 
     d = sub.add_parser("download", help="Only download the finished Chinese PDF")

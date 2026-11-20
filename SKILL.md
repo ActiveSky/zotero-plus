@@ -120,7 +120,12 @@ Web flow: `arxivInfo` → poll `arxivStatus`, or upload the item's PDF and poll
 
 Local flow: read the item's English PDF → run the engine with
 `local.base_url`/`local.model` → attach the result. The engine's runtime,
-fonts and OCR models must be installed (see below).
+fonts and OCR models must be installed (see below). Section [引擎参数透传](#引擎参数透传)
+covers the engine switches this command can pass through.
+
+`local` keys: `engine`, `base_url`, `api_key`, `model`, `source_language`,
+`target_language`, `font_profile`, `ocr_mode`, `concurrency`,
+`thinking_mode`, `translate_tables` (default `off`), `extra_args` (list).
 
 - Naming: **`<English PDF basename>_zh_CN.pdf`**, falling back to the arXiv id.
 - An existing translation attachment is reused unless `--force`.
@@ -165,6 +170,52 @@ one field:
 A reasoning model spends several times longer per segment with thinking on, so
 set the value `local.base_url` actually honors. `reasoning-none` measured ~2×
 faster than the default on deepseek-flash.
+
+### 引擎参数透传
+
+The engine exposes ~126 options; the ones worth reaching from here have their
+own switches, and anything else goes through `--engine-arg`.
+
+```powershell
+zotero-plus translate --key DMI9KNFZ --local --dry-run          # print the command
+zotero-plus translate --key DMI9KNFZ --local --pages 1-10
+zotero-plus translate --key DMI9KNFZ --local --bilingual --bilingual-order translated-first
+zotero-plus translate --key DMI9KNFZ --local --output-format=pdf-docx
+zotero-plus translate --key DMI9KNFZ --local --engine-arg=--min-font-scale=0.8
+```
+
+| Switch | Engine option |
+|---|---|
+| `--pages 1,5-10` | `--pages` |
+| `--pdf-mode auto\|preserve\|reflow-translated\|reflow-bilingual` | `--pdf-mode` |
+| `--bilingual` / `--bilingual-order` | `--pdf-bilingual` / `--pdf-bilingual-order` |
+| `--translate-tables auto\|on\|off` | `--translate-tables` |
+| `--translate-bookmarks` / `--no-translate-bookmarks` | `--translate-bookmarks` |
+| `--output-format pdf\|pdf-docx\|pdf-pptx` | `--output-format` |
+| `--terminology <csv>` (repeatable) | `--terminology` |
+| `--request-timeout` / `--on-page-error` | same names |
+| `--engine-arg=--opt=value` (repeatable) | anything else |
+
+Precedence is `local.extra_args` → named switch → `--engine-arg`, and the last
+value wins, so a one-off flag beats a config default. `--dry-run` prints the
+finished command (the API key travels in the environment, never in argv).
+
+Options the script sets itself — `--output`, `--resource-root`, `--api-key-env`,
+`--base-url`, `--model`, `--provider`, the languages, `--font-profile`,
+`--ocr-mode`, `--concurrency`, `--translation-cache-db`, `--thinking-mode` — are
+rejected rather than silently ignored; use their config keys instead.
+
+**Tables default to `off`.** `local.translate_tables` ships as `off`, so table
+cells keep the source language: a mistranslated results table costs more than
+an untranslated one, and numeric cells are where machine translation does the
+most damage. Set it to `auto` (translate prose-heavy tables only) or `on` in
+`config.json`, or pass `--translate-tables=auto` for one run.
+
+`--pages` produces a full-length PDF whose other pages stay in the source
+language; the attachment keeps the `_zh_CN.pdf` name, so a later run reuses it
+instead of translating the rest. `--output-format=pdf-docx|pdf-pptx` writes a
+sibling Office file next to the PDF in the output directory and reports its
+path; only the PDF is attached to the item.
 
 Full options: `zotero-plus translate --help`.
 

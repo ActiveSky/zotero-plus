@@ -21,6 +21,17 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `translate --local` passes engine options through: `--pages`, `--pdf-mode`,
+  `--bilingual`, `--bilingual-order`, `--translate-tables`,
+  `--translate-bookmarks`/`--no-translate-bookmarks`, `--output-format`,
+  `--terminology`, `--request-timeout`, `--on-page-error`, and a repeatable
+  `--engine-arg=--opt=value` for everything else. Precedence is
+  `local.extra_args` → named switch → `--engine-arg`; options the script owns
+  (`--output`, `--api-key-env`, `--model`, …) are rejected instead of being
+  silently ignored. `--dry-run` prints the finished command.
+- `local.translate_tables` defaults to `off`: table cells keep the source
+  language unless `auto` or `on` is chosen, because a mistranslated results
+  table costs more than an untranslated one.
 - `outline` rebuilds a 1–3 level PDF outline from the page text and writes it
   as real bookmarks, for the papers that ship without one (arXiv, MLSys,
   machine-translated copies). Numbered headings give the level, `A Evaluation
