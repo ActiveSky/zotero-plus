@@ -226,8 +226,24 @@ def _lookup_table(rows: list[dict], venue_raw: str | None) -> dict | None:
 
 
 def lookup_ranking(venue_raw: str | None) -> dict | None:
-    """CORE-ranked venues first (they carry write_as forms), then the CCF catalogue."""
-    return _lookup_table(_table(), venue_raw) or _lookup_table(_ccf_table(), venue_raw)
+    """CORE-ranked venues first (they carry write_as forms), then the CCF catalogue.
+
+    A venue often appears in both tables (TPAMI, NAACL, ...). The CORE row has
+    the write_as form but no CCF rank, so returning it alone silently drops the
+    CCF tier. Merge the CCF rank in instead of letting the CORE row shadow it.
+    """
+    core_row = _lookup_table(_table(), venue_raw)
+    ccf_row = _lookup_table(_ccf_table(), venue_raw)
+    if core_row and not ccf_row:
+        # The CCF catalogue sometimes spells the full name differently
+        # ("Associationfor"); the canonical abbreviation still matches.
+        ccf_row = _lookup_table(_ccf_table(), core_row.get("canonical"))
+    if core_row and ccf_row:
+        merged = dict(core_row)
+        merged["ccf"] = core_row.get("ccf") or ccf_row.get("ccf") or ""
+        merged["kind"] = core_row.get("kind") or ccf_row.get("kind") or ""
+        return merged
+    return core_row or ccf_row
 
 
 def is_nonvenue(v: str | None) -> bool:
@@ -984,7 +1000,7 @@ def _print_table(results: list[dict], min_conf: float) -> None:
     print(f"{'KEY':<9} {'CONF':<5} {'SRC':<16} {'VENUE':<10} {'YEAR':<5} {'CCF':<4} {'CORE':<4} {'TYPE':<16} TITLE")
     print("-" * 124)
     for r in results:
-        mark = "*" if r.get("confidence", 0) >= min_conf and r.get("target_item_type") else " "
+        mark = "*" if r.get("confidence", 0) >= min_conf and _has_changes(r) else " "
         print(f"{r.get('item_key',''):<9} {r.get('confidence',0):<5} "
               f"{','.join(r.get('sources') or [])[:16]:<16} "
               f"{str(r.get('canonical') or '-'):<10} {str(r.get('year') or '-'):<5} "
@@ -994,13 +1010,23 @@ def _print_table(results: list[dict], min_conf: float) -> None:
     print("\n* = ready to write at or above the confidence threshold")
 
 
+def _has_changes(res: dict) -> bool:
+    """A plan row is actionable if it changes the type/fields or adds tags.
+
+    Tag-only updates matter: adding ``CCF:A`` to a journal article that is
+    already correctly typed has no ``target_item_type`` and no ``fields``, but
+    it is still a real change the user asked for.
+    """
+    return bool(res.get("target_item_type") or res.get("fields") or res.get("suggested_tags"))
+
+
 def cmd_apply(args) -> int:
     ensure_zotero_mcp()
     plan = json.loads(Path(args.plan).read_text(encoding="utf-8"))
     results = plan.get("results") or []
     selected = [
         r for r in results
-        if r.get("target_item_type") and r.get("fields")
+        if _has_changes(r)
         and r.get("confidence", 0) >= args.min_confidence
         and (not args.keys or r["item_key"] in args.keys.split(","))
     ]
@@ -1047,7 +1073,10 @@ def cmd_apply(args) -> int:
                 failed += 1
                 continue
             ok += 1
-            print(f"  {r['item_key']}: -> {r['target_item_type']} @ {r.get('canonical')}")
+            if r.get("target_item_type"):
+                print(f"  {r['item_key']}: -> {r['target_item_type']} @ {r.get('canonical')}")
+            else:
+                print(f"  {r['item_key']}: tags updated @ {r.get('canonical')}")
         except Exception as exc:
             failed += 1
             print(f"  {r['item_key']}: failed: {exc}")
