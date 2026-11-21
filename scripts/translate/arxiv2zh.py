@@ -109,6 +109,18 @@ def parse_arxiv_id(value: str | None) -> str | None:
     return base
 
 
+def arxiv_version_candidates(arxiv_id: str, limit: int = 5) -> list[str]:
+    """Versioned ids to probe when the service leaves the base id at 'init'.
+
+    hjfy.top sometimes creates the translation task under a versioned id
+    (e.g. ``2610.21165v1``) while the unversioned id stays at ``init`` forever.
+    Polling only the unversioned id then waits until the timeout.
+    """
+    if re.search(r"v\d+$", arxiv_id, re.I):
+        return [arxiv_id]
+    return [f"{arxiv_id}v{n}" for n in range(1, limit + 1)]
+
+
 def arxiv_id_of_item(data: dict) -> str | None:
     for field in ("archiveID", "DOI", "url", "extra"):
         val = str(data.get(field) or "")
@@ -455,11 +467,21 @@ def fetch_info(svc: Service, arxiv_id: str) -> bool:
     return bool(data.get("hasSrc", True))
 
 
-def wait_arxiv(svc: Service, arxiv_id: str, interval: int, timeout: int) -> dict:
+def wait_arxiv(svc: Service, arxiv_id: str, interval: int, timeout: int) -> tuple[dict, str]:
+    """Wait for an arXiv translation and return (status_data, remote_id).
+
+    The service usually keys the task by the unversioned id, but it can leave
+    that id at ``init`` while the real task lives under ``<id>vN``. Probe the
+    versioned ids while the base id is idle, then follow whichever id becomes
+    active or finished.
+    """
     start = time.time()
+    resolved = arxiv_id
     last = ""
+    next_probe = 0.0
+
     while True:
-        code, data, msg = envelope(svc.get_json(f"/api/arxivStatus/{urllib.parse.quote(arxiv_id)}"))
+        code, data, msg = envelope(svc.get_json(f"/api/arxivStatus/{urllib.parse.quote(resolved)}"))
         if code == 101:
             die("hjfy.top requires a login for this paper. Run `login`, sign in, "
                 "then pass --cookie or use --cookie-from-zotero.")
@@ -471,9 +493,31 @@ def wait_arxiv(svc: Service, arxiv_id: str, interval: int, timeout: int) -> dict
             out(f"  {state}: {info}")
             last = info
         if state == "finished":
-            return data
+            return data, resolved
         if state in ("failed", "error", "fault"):
             die(f"remote translation failed: {info or state}")
+
+        # Only probe versions while the base id is still idle; a versioned task
+        # that turns active is followed directly from then on.
+        if resolved == arxiv_id and state == "init" and time.time() >= next_probe:
+            next_probe = time.time() + max(60, interval * 6)
+            for candidate in arxiv_version_candidates(arxiv_id):
+                vcode, vdata, vmsg = envelope(
+                    svc.get_json(f"/api/arxivStatus/{urllib.parse.quote(candidate)}"))
+                if vcode != 0:
+                    continue
+                vstate = str(vdata.get("status") or "")
+                vinfo = str(vdata.get("info") or "")
+                if vinfo and vinfo != last:
+                    out(f"  {candidate}: {vstate}: {vinfo}")
+                    last = vinfo
+                if vstate == "finished":
+                    return vdata, candidate
+                if vstate in ("start", "processing"):
+                    out(f"  following versioned task {candidate} ({vstate})")
+                    resolved = candidate
+                    break
+
         if time.time() - start > timeout:
             die(f"timed out after {timeout}s (last state: {state})")
         time.sleep(max(5, interval))
@@ -894,7 +938,7 @@ def cmd_translate(args) -> int:
 
     out(f"Waiting for translation ({kind} {remote_id})…")
     if kind == "arxiv":
-        wait_arxiv(svc, remote_id, args.poll_interval, args.timeout)
+        _, remote_id = wait_arxiv(svc, remote_id, args.poll_interval, args.timeout)
     else:
         wait_file(svc, remote_id, args.poll_interval, args.timeout)
 
